@@ -1,0 +1,21 @@
+# 認証情報・シークレット（最優先で除外）
+.clasprc.json
+**/config.php
+bridge/config.php
+*.log
+*.env
+.env
+.env.*
+**/*secret*
+**/*SECRET*
+**/*token*.json
+**/*credentials*.json
+
+# 依存関係
+node_modules/
+
+# エディタ・ツールのローカル設定
+.claude/
+.vscode/
+.DS_Store
+Thumbs.db

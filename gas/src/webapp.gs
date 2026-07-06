@@ -1,0 +1,198 @@
+/**
+ * webapp.gs — テナント別管理UI向け JSON API
+ *
+ * doPost のみを実データ用に使う。GAS WebAppはCORSプリフライト(OPTIONS)に応答できないため、
+ * フロントエンドは Content-Type: text/plain でPOSTする前提（doPost側もContent-Typeで弾かない）。
+ * doGet は「ここはAPI」という案内テキストのみを返す。
+ *
+ * リクエスト形式: { token, action, payload }
+ * - token: テナント用アクションは verifyTenantToken_ で検証するテナントトークン(平文)。
+ *          管理者用アクションは ADMIN_TOKEN（平文）。
+ * - action/payload: 下記 handleTenantAction_ / handleAdminAction_ 参照。
+ *
+ * 安全設計:
+ *  - 全テナント用アクションは verifyTenantToken_(token) で解決した tenant_id のみを使い、
+ *    payload に tenant_id を含めても一切信用しない（自分のスプレッドシート以外に触れさせない）。
+ *  - 例外は必ず {ok:false, error:"..."} という安全な文字列で返し、スタックトレースは返さない。
+ *  - send_test_mail の宛先は常にテナント自身の shop_email 固定。payloadでの宛先指定は不可。
+ *  - DRY_RUN=true の間は send_test_mail も含めて実送信は一切行われない（isDryRun_()を必ず通す）。
+ */
+
+function doGet(e) {
+  return ContentService
+    .createTextOutput('このURLはstep-samurai管理APIのエンドポイントです。POSTリクエストで利用してください。')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+const ADMIN_ACTIONS_ = ['list_tenants', 'issue_tenant_token'];
+
+function doPost(e) {
+  try {
+    const req    = JSON.parse(e.postData.contents);
+    const action = req.action;
+
+    if (ADMIN_ACTIONS_.includes(action)) {
+      return handleAdminAction_(req);
+    }
+    return handleTenantAction_(req);
+  } catch (err) {
+    // JSON.parse失敗などの想定外エラー。スタックトレースは返さない。
+    return jsonResponse_({ ok: false, error: 'internal_error' });
+  }
+}
+
+// ===== 管理者用アクション（ADMIN_TOKEN認証） =====
+
+function handleAdminAction_(req) {
+  try {
+    requireAdmin_(req.token);
+  } catch (e) {
+    return jsonResponse_({ ok: false, error: 'unauthorized' });
+  }
+
+  const payload = req.payload || {};
+
+  try {
+    switch (req.action) {
+      case 'list_tenants':
+        return jsonResponse_({ ok: true, tenants: listActiveTenants() });
+
+      case 'issue_tenant_token': {
+        if (!payload.tenant_id) return jsonResponse_({ ok: false, error: 'tenant_id_required' });
+        const token = issueTenantToken_(payload.tenant_id);
+        return jsonResponse_({ ok: true, tenant_id: payload.tenant_id, token: token });
+      }
+
+      default:
+        return jsonResponse_({ ok: false, error: 'unknown_action' });
+    }
+  } catch (e) {
+    return jsonResponse_({ ok: false, error: 'internal_error' });
+  }
+}
+
+// ===== テナント用アクション（テナントトークン認証） =====
+
+function handleTenantAction_(req) {
+  const tenantId = verifyTenantToken_(req.token);
+  if (!tenantId) return jsonResponse_({ ok: false, error: 'unauthorized' });
+
+  const payload = req.payload || {};
+
+  try {
+    switch (req.action) {
+      case 'get_settings':
+        return jsonResponse_({ ok: true, settings: getTenantSettingsRaw_(tenantId) || [] });
+
+      case 'update_setting':
+        return handleUpdateSetting_(tenantId, payload);
+
+      case 'get_templates':
+        return jsonResponse_({
+          ok: true,
+          templates: KNOWN_TEMPLATE_IDS_.map(id => getTenantTemplateRaw_(tenantId, id)).filter(Boolean),
+        });
+
+      case 'update_template':
+        return handleUpdateTemplate_(tenantId, payload);
+
+      case 'send_test_mail':
+        return handleSendTestMail_(tenantId);
+
+      case 'get_history':
+        return jsonResponse_({ ok: true, history: getTenantHistory_(tenantId) });
+
+      default:
+        return jsonResponse_({ ok: false, error: 'unknown_action' });
+    }
+  } catch (e) {
+    return jsonResponse_({ ok: false, error: 'internal_error' });
+  }
+}
+
+function handleUpdateSetting_(tenantId, payload) {
+  if (!payload.key || payload.value === undefined || payload.value === null) {
+    return jsonResponse_({ ok: false, error: 'key_and_value_required' });
+  }
+  const result = setTenantSettingValue_(tenantId, String(payload.key), String(payload.value));
+  if (!result.ok) return jsonResponse_(result);
+  return jsonResponse_({ ok: true, key: payload.key, value: payload.value });
+}
+
+function handleUpdateTemplate_(tenantId, payload) {
+  const templateId = payload.template_id;
+  if (!KNOWN_TEMPLATE_IDS_.includes(templateId)) {
+    return jsonResponse_({ ok: false, error: 'unknown_template_id' });
+  }
+  if (typeof payload.subject !== 'string' || typeof payload.body !== 'string') {
+    return jsonResponse_({ ok: false, error: 'subject_and_body_required' });
+  }
+
+  const warnings = [...new Set([
+    ...findUnknownPlaceholders_(payload.subject),
+    ...findUnknownPlaceholders_(payload.body),
+  ])];
+
+  const result = setTenantTemplate_(tenantId, templateId, payload.subject, payload.body);
+  if (!result.ok) return jsonResponse_(result);
+  return jsonResponse_({ ok: true, warnings: warnings });
+}
+
+/**
+ * テスト送信。宛先は常にそのテナントの shop_email 固定（payloadでの宛先指定は受け付けない）。
+ * DRY_RUN=true の間は実送信されず、内容をログ出力するのみ。
+ */
+function handleSendTestMail_(tenantId) {
+  const creds = getRmsCredentials(tenantId);
+  const tpl   = getTenantTemplateRaw_(tenantId, 'follow_v1');
+  if (!tpl) return jsonResponse_({ ok: false, error: 'template_missing' });
+
+  const vars = {
+    buyer_name:     'テスト太郎',
+    shop_name:      creds.shop_name,
+    ship_date:      Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'),
+    shop_signature: creds.shop_signature,
+  };
+  const subject = '[テスト送信] ' + renderTemplate_(tpl.subject, vars);
+  const body    = renderTemplate_(tpl.body, vars);
+  const to      = creds.from_email;
+
+  if (isDryRun_()) {
+    Logger.log(`[DRY_RUN] send_test_mail: 実送信せず内容のみログ出力 tenant=${tenantId} to=${to} subject=${subject}`);
+    return jsonResponse_({ ok: true, dry_run: true, to: to, subject: subject });
+  }
+
+  try {
+    sendViaBridge_(tenantId, to, creds.from_email, creds.from_name, subject, body, '', creds.reply_to, '');
+    return jsonResponse_({ ok: true, dry_run: false, to: to });
+  } catch (e) {
+    return jsonResponse_({ ok: false, error: 'send_failed' });
+  }
+}
+
+function getTenantHistory_(tenantId) {
+  const ss          = getTenantSpreadsheet(tenantId);
+  const sendsSheet   = ss.getSheetByName('sends');
+  const couponsSheet = ss.getSheetByName('coupons');
+
+  const lastRows = (sheet, n) => {
+    if (!sheet) return [];
+    const data   = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    const header = data[0];
+    return data.slice(1).slice(-n).reverse().map(row =>
+      header.reduce((obj, h, i) => { obj[h] = row[i]; return obj; }, {})
+    );
+  };
+
+  return {
+    sends:   lastRows(sendsSheet, 50),
+    coupons: lastRows(couponsSheet, 50),
+  };
+}
+
+function jsonResponse_(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}

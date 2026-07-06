@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>step-samurai 管理画面</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="login-box">
+    <h1>step-samurai 管理画面</h1>
+    <p class="hint">このページを閉じると再ログインが必要です（APIのURL・トークンはブラウザのメモリ上にのみ保持され、保存されません）。</p>
+
+    <label for="api-url">API のURL</label>
+    <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
+
+    <label for="api-token">アクセストークン</label>
+    <input id="api-token" type="password" placeholder="発行されたトークンを入力" autocomplete="off">
+
+    <button id="login-btn">ログイン</button>
+    <p id="login-error" class="error" hidden></p>
+  </div>
+</div>
+
+<div id="app-screen" class="screen" hidden>
+  <header class="app-header">
+    <h1>step-samurai 管理画面</h1>
+    <button id="logout-btn" class="secondary">ログアウト</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="settings">設定</button>
+    <button class="tab-btn" data-tab="templates">文面</button>
+    <button class="tab-btn" data-tab="test">テスト送信</button>
+    <button class="tab-btn" data-tab="history">履歴</button>
+  </nav>
+
+  <main>
+    <section id="tab-settings" class="tab-panel active">
+      <h2>設定</h2>
+      <p class="hint">編集可能な項目のみ変更できます。編集不可の項目は参考表示のみです。</p>
+      <div id="settings-list" class="card-list"></div>
+    </section>
+
+    <section id="tab-templates" class="tab-panel">
+      <h2>メール文面</h2>
+      <p class="hint">
+        差し込み変数: <code>{{buyer_name}}</code> <code>{{shop_name}}</code> <code>{{ship_date}}</code>
+        <code>{{discount}}</code> <code>{{coupon_valid_until}}</code> <code>{{coupon_get_url}}</code> <code>{{shop_signature}}</code>
+      </p>
+      <div id="templates-list"></div>
+    </section>
+
+    <section id="tab-test" class="tab-panel">
+      <h2>テスト送信</h2>
+      <p class="hint">宛先は常にこの店舗の登録メールアドレス（サーバ側固定）です。他の宛先へは送信できません。</p>
+      <p class="hint">DRY_RUNが有効な間は実際には送信されず、内容の確認のみ行われます。</p>
+      <button id="send-test-btn">フォローメールのテスト送信を実行</button>
+      <pre id="test-result" class="result-box" hidden></pre>
+    </section>
+
+    <section id="tab-history" class="tab-panel">
+      <h2>送信・クーポン発行履歴（直近50件）</h2>
+      <h3>メール送信</h3>
+      <div class="table-wrap"><table id="sends-table"><thead></thead><tbody></tbody></table></div>
+      <h3>クーポン発行</h3>
+      <div class="table-wrap"><table id="coupons-table"><thead></thead><tbody></tbody></table></div>
+    </section>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -121,7 +121,7 @@ function evaluateCoupons(tenantId) {
 
     if (status === 'cancelled') return;   // キャンセル除外
     if (!shipDate) return;                 // 未発送除外
-    if (new Date(shipDate) < goLiveDate) return; // GO_LIVE_DATEより前に発送された注文は対象外
+    if (!isOnOrAfterGoLiveDate_(shipDate, goLiveDate)) return; // GO_LIVE_DATEより前に発送された注文は対象外（当日は含む）
 
     // 発送後N日経過チェック（Nはsettings.follow_days_after_ship）
     const diffDays = Math.floor((now - new Date(shipDate)) / (1000 * 60 * 60 * 24));

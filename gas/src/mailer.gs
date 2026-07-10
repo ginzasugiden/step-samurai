@@ -186,7 +186,7 @@ function sendPendingMails(tenantId) {
     if (row[idx('status')] === 'cancelled') return;
     const shipDate = row[idx('ship_date')];
     if (!shipDate) return;
-    if (new Date(shipDate) < goLiveDate) return; // GO_LIVE_DATEより前に発送された注文は対象外
+    if (!isOnOrAfterGoLiveDate_(shipDate, goLiveDate)) return; // GO_LIVE_DATEより前に発送された注文は対象外（当日は含む）
 
     const diffDays = Math.floor((now - new Date(shipDate)) / (1000 * 60 * 60 * 24));
     if (diffDays < followDays) return;

@@ -129,13 +129,13 @@ function debugSafetyCheck_() {
 }
 
 // GO_LIVE_DATE（Script Properties, YYYY-MM-DD）より前に発送された注文を対象外にする日付ガード。
+// 'yyyy-MM-dd' 文字列を返す（Date型ではない。isOnOrAfterGoLiveDate_ と組み合わせて使うことで
+// タイムゾーン起因の9時間ズレを避ける。詳細は config.gs の toJstDateString_ のコメント参照）。
 // 未設定・空・不正な値の場合は null を返す（呼び出し側で fail-closed に全件スキップする）。
 function getGoLiveDate_() {
   const raw = PropertiesService.getScriptProperties().getProperty('GO_LIVE_DATE');
   if (!raw) return null;
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return null;
-  return d;
+  return toJstDateString_(raw);
 }
 
 

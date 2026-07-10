@@ -15,6 +15,47 @@
 
 const CONFIG_CACHE_TTL_SEC = 300; // 5分
 
+// ===== 日付比較（GO_LIVE_DATE境界のタイムゾーンバグ対策） =====
+
+/**
+ * Date型/文字列いずれで入っていても、Asia/Tokyoのカレンダー日付として
+ * 'yyyy-MM-dd' 文字列に正規化する。
+ *
+ * 背景: new Date("yyyy-MM-dd") はUTC 0時として解釈されるため、Asia/Tokyo(UTC+9)の
+ * シートDate値（JST 0時）と直接比較すると9時間分のズレが生じ、GO_LIVE_DATE当日発送の
+ * 注文が誤って除外されるバグがあった。日付同士は必ずこの文字列表現に正規化してから
+ * 比較すること（文字列の辞書順 = 日付順になるため、比較は単純な文字列比較でよい）。
+ *
+ * 既に 'yyyy-MM-dd' で始まる文字列はタイムゾーン変換せずそのまま使う
+ * （= それ自体がカレンダー日付そのものであり、UTC/JSTどちらの深夜として解釈すべきかという
+ * 曖昧さを持ち込まないため）。それ以外の文字列やDate型はAsia/Tokyoのカレンダー日付に変換する。
+ */
+function toJstDateString_(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    return Utilities.formatDate(value, 'Asia/Tokyo', 'yyyy-MM-dd');
+  }
+  const str = String(value).trim();
+  const m = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  const parsed = new Date(str);
+  if (isNaN(parsed.getTime())) return null;
+  return Utilities.formatDate(parsed, 'Asia/Tokyo', 'yyyy-MM-dd');
+}
+
+/**
+ * 発送日(shipDate: Date型/文字列いずれも可)が GO_LIVE_DATE（'yyyy-MM-dd'文字列）以降かどうかを
+ * 正規化した日付文字列同士の比較で判定する（境界＝GO_LIVE_DATE当日は「含む」）。
+ * mailer.gs sendPendingMails / coupon_engine.gs evaluateCoupons の両方がこの1関数を共用する。
+ * shipDateが不正/空、またはgoLiveDateStrが不正な場合は false（fail-closed=対象外）。
+ */
+function isOnOrAfterGoLiveDate_(shipDate, goLiveDateStr) {
+  const shipStr = toJstDateString_(shipDate);
+  if (!shipStr || !goLiveDateStr) return false;
+  return shipStr >= goLiveDateStr;
+}
+
 // ===== プレースホルダ置換 =====
 
 // メール文面で使用を許可する既知のプレースホルダ一覧。

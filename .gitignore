@@ -11,6 +11,9 @@ bridge/config.php
 **/*token*.json
 **/*credentials*.json
 
+# 内部向けドキュメント（実メールアドレス等を含む可能性があるため非公開）
+docs/internal/
+
 # 依存関係
 node_modules/
 

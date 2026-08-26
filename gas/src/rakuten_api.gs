@@ -13,7 +13,10 @@ function getRmsAuthHeader_(tenantId) {
   return { 'Authorization': `ESA ${token}` };
 }
 
-// 受注取得（過去7日差分）→ ordersタブへupsert
+// 受注取得（注文日ベース + 出荷完了報告日ベースの2軸・過去7日差分）→ ordersタブへupsert
+// 配達日指定（母の日・誕生日・命日等）で注文から7日以上あとに発送される注文は、
+// 注文日ベースの検索窓だけでは発送後に再取得されず ship_date が空のまま残る。
+// そのため「直近7日に出荷完了報告された注文」(dateType:5) も併せて取得しマージする。
 function fetchOrders(tenantId) {
   const ss     = getTenantSpreadsheet(tenantId);
   const sheet  = ss.getSheetByName('orders');
@@ -23,44 +26,62 @@ function fetchOrders(tenantId) {
   const dateFrom = new Date(); dateFrom.setDate(dateFrom.getDate() - 7);
   const dateTo   = new Date();
 
-  const searchBody = {
-    dateType:         1,
-    startDatetime:    formatRmsDate_(dateFrom),
-    endDatetime:      formatRmsDate_(dateTo),
-    orderProgressList: [100, 200, 300, 400, 500, 600, 700], // キャンセル(800,900)以外
-    PaginationRequestModel: { requestRecordsAmount: 1000, requestPage: 1 }
-  };
+  const byOrderDate = searchOrderNumbers_(tenantId, 1, dateFrom, dateTo); // 1=注文日
+  const byShipDate  = searchOrderNumbers_(tenantId, 5, dateFrom, dateTo); // 5=出荷完了報告日
+  const orderNumbers = [...new Set([...byOrderDate, ...byShipDate])];
 
-  const searchRes = UrlFetchApp.fetch(`${RMS_BASE}/order/searchOrder/`, {
+  if (orderNumbers.length === 0) { Logger.log('fetchOrders: 新規受注なし'); return; }
+
+  // getOrder は1リクエスト最大100件のためチャンク分割して取得
+  const orders = [];
+  chunk_(orderNumbers, 100).forEach(chunkNums => {
+    const detailRes = UrlFetchApp.fetch(`${RMS_BASE}/order/getOrder/`, {
+      method:      'post',
+      contentType: 'application/json; charset=UTF-8',
+      headers:     getRmsAuthHeader_(tenantId),
+      payload:     JSON.stringify({ orderNumberList: chunkNums, version: 7 }),
+      muteHttpExceptions: true,
+    });
+    if (detailRes.getResponseCode() !== 200) {
+      Logger.log(`fetchOrders getOrder error (${chunkNums.length}件): ${detailRes.getContentText()}`);
+      return;
+    }
+    const detail = JSON.parse(detailRes.getContentText());
+    (detail.OrderModelList || []).forEach(o => orders.push(o));
+  });
+
+  orders.forEach(order => upsertOrder_(sheet, idx, order));
+  recomputePurchaseCounts_(sheet, idx);
+  Logger.log(`fetchOrders [${tenantId}]: ${orders.length}件取得（注文日軸${byOrderDate.length}件/出荷報告軸${byShipDate.length}件）`);
+}
+
+// searchOrder を指定 dateType で実行し orderNumberList を返す（エラー時は空配列 = fail-closed）
+function searchOrderNumbers_(tenantId, dateType, dateFrom, dateTo) {
+  const searchBody = {
+    dateType:          dateType,
+    startDatetime:     formatRmsDate_(dateFrom),
+    endDatetime:       formatRmsDate_(dateTo),
+    orderProgressList: [100, 200, 300, 400, 500, 600, 700],
+    PaginationRequestModel: { requestRecordsAmount: 1000, requestPage: 1 },
+  };
+  const res = UrlFetchApp.fetch(`${RMS_BASE}/order/searchOrder/`, {
     method:      'post',
     contentType: 'application/json; charset=UTF-8',
     headers:     getRmsAuthHeader_(tenantId),
     payload:     JSON.stringify(searchBody),
     muteHttpExceptions: true,
   });
-
-  if (searchRes.getResponseCode() !== 200) {
-    Logger.log(`fetchOrders search error: ${searchRes.getContentText()}`);
-    return;
+  if (res.getResponseCode() !== 200) {
+    Logger.log(`searchOrderNumbers_ error (dateType=${dateType}): ${res.getContentText()}`);
+    return [];
   }
+  return JSON.parse(res.getContentText()).orderNumberList || [];
+}
 
-  const searchResult = JSON.parse(searchRes.getContentText());
-  const orderNumbers = searchResult.orderNumberList || [];
-  if (orderNumbers.length === 0) { Logger.log('fetchOrders: 新規受注なし'); return; }
-
-  const detailRes = UrlFetchApp.fetch(`${RMS_BASE}/order/getOrder/`, {
-    method:      'post',
-    contentType: 'application/json; charset=UTF-8',
-    headers:     getRmsAuthHeader_(tenantId),
-    payload:     JSON.stringify({ orderNumberList: orderNumbers, version: 7 }),
-    muteHttpExceptions: true,
-  });
-
-  const detail = JSON.parse(detailRes.getContentText());
-  const orders = detail.OrderModelList || [];
-
-  orders.forEach(order => upsertOrder_(sheet, idx, order));
-  Logger.log(`fetchOrders [${tenantId}]: ${orders.length}件取得`);
+function chunk_(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 function upsertOrder_(sheet, idx, order) {
@@ -86,7 +107,7 @@ function upsertOrder_(sheet, idx, order) {
   rowData[idx('item_code')]      = item.itemNumber || '';
   rowData[idx('item_name')]      = item.itemName || '';
   rowData[idx('amount')]         = order.totalPrice || 0;
-  rowData[idx('purchase_count')] = 1;
+  rowData[idx('purchase_count')] = 1; // 仮値。fetchOrders末尾のrecomputePurchaseCounts_で全行再計算される
   rowData[idx('prefecture')]     = orderer.prefecture || pkg.SenderModel?.prefecture || '';
   rowData[idx('ship_date')]      = shipDate;
   rowData[idx('status')]         = status;
@@ -102,7 +123,17 @@ function upsertOrder_(sheet, idx, order) {
 }
 
 function mapOrderStatus_(progress) {
-  const map = { 100:'pending', 200:'pending', 300:'shipped', 400:'shipped', 500:'shipped', 600:'shipped', 700:'shipped', 800:'cancelled', 900:'cancelled' };
+  // 楽天ペイ受注API orderProgress:
+  //  100:注文確認待ち 200:楽天処理中 300:発送待ち 400:変更確定待ち
+  //  500:発送済 600:支払手続き中 700:支払手続き済 800:キャンセル確定待ち 900:キャンセル確定
+  // 300/400は未発送のため pending。600/700は後払い等で発送後に遷移するため shipped 扱い
+  // （ship_date空ガードが最終防衛線として機能する）。
+  // 旧実装は 300/400 を shipped にしていたため「shippedなのにship_date空」の注文を量産していた。
+  const map = {
+    100: 'pending', 200: 'pending', 300: 'pending', 400: 'pending',
+    500: 'shipped', 600: 'shipped', 700: 'shipped',
+    800: 'cancelled', 900: 'cancelled',
+  };
   return map[progress] || 'pending';
 }
 
@@ -305,4 +336,42 @@ function debugGetOrderRaw(tenantId) {
   Logger.log('orderNumber: ' + order.orderNumber);
   Logger.log('OrdererModel: ' + JSON.stringify(order.OrdererModel));
   Logger.log('PackageModelList[0].ItemModelList[0].itemName: ' + (order.PackageModelList?.[0]?.ItemModelList?.[0]?.itemName));
+}
+
+/**
+ * orders シート全体を走査し、buyer_key ごとに order_date 昇順で
+ * 「その注文が何回目の購入か」を purchase_count 列へ一括書き戻す。
+ * キャンセル注文は回数にカウントしない。
+ * 注意: buyer_key は現状マスクアドレス。同一顧客で注文間の安定性が未検証のため、
+ * リピート判定の精度はこのキーの安定性に依存する（不安定と判明したら別キーへ移行）。
+ */
+function recomputePurchaseCounts_(sheet, idx) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return;
+
+  const rows = data.slice(1).map((row, i) => ({
+    rowIndex:  i,
+    buyerKey:  row[idx('buyer_key')],
+    orderDate: String(row[idx('order_date')] || ''),
+    orderNum:  String(row[idx('order_number')] || ''),
+    cancelled: row[idx('status')] === 'cancelled',
+  })).filter(r => r.orderNum);
+
+  const byBuyer = {};
+  rows.forEach(r => {
+    (byBuyer[r.buyerKey] = byBuyer[r.buyerKey] || []).push(r);
+  });
+
+  const counts = new Array(data.length - 1).fill(null);
+  Object.values(byBuyer).forEach(list => {
+    list.sort((a, b) => (a.orderDate + a.orderNum).localeCompare(b.orderDate + b.orderNum));
+    let n = 0;
+    list.forEach(r => {
+      if (!r.cancelled) n++;
+      counts[r.rowIndex] = Math.max(n, 1);
+    });
+  });
+
+  const colValues = counts.map((c, i) => [c === null ? data[i + 1][idx('purchase_count')] : c]);
+  sheet.getRange(2, idx('purchase_count') + 1, colValues.length, 1).setValues(colValues);
 }

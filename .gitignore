@@ -2,6 +2,8 @@
 .clasprc.json
 **/config.php
 bridge/config.php
+**/smtp_bridge.php
+**/config.additions.php
 *.log
 *.env
 .env

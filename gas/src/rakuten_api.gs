@@ -336,6 +336,26 @@ function debugGetOrderRaw(tenantId) {
   Logger.log('orderNumber: ' + order.orderNumber);
   Logger.log('OrdererModel: ' + JSON.stringify(order.OrdererModel));
   Logger.log('PackageModelList[0].ItemModelList[0].itemName: ' + (order.PackageModelList?.[0]?.ItemModelList?.[0]?.itemName));
+  Logger.log(`ItemModelList[0] full: ${JSON.stringify(order.PackageModelList?.[0]?.ItemModelList?.[0] || {}, null, 2)}`);
+}
+
+/**
+ * デバッグ用：指定した注文番号1件の getOrder 生レスポンスをログ出力する（読み取りのみ・副作用なし）。
+ */
+function debugGetOrderRawFor_(tenantId, orderNumber) {
+  const detailRes = UrlFetchApp.fetch(`${RMS_BASE}/order/getOrder/`, {
+    method:      'post',
+    contentType: 'application/json; charset=UTF-8',
+    headers:     getRmsAuthHeader_(tenantId),
+    payload:     JSON.stringify({ orderNumberList: [orderNumber], version: 7 }),
+    muteHttpExceptions: true,
+  });
+
+  const order = JSON.parse(detailRes.getContentText()).OrderModelList[0];
+  Logger.log('orderNumber: ' + order.orderNumber);
+  Logger.log('OrdererModel: ' + JSON.stringify(order.OrdererModel));
+  Logger.log('PackageModelList[0].ItemModelList[0].itemName: ' + (order.PackageModelList?.[0]?.ItemModelList?.[0]?.itemName));
+  Logger.log(`ItemModelList[0] full: ${JSON.stringify(order.PackageModelList?.[0]?.ItemModelList?.[0] || {}, null, 2)}`);
 }
 
 /**

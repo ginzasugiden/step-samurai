@@ -2,6 +2,11 @@
  * main.gs — エントリ・トリガー登録
  */
 
+/** 指定注文1件の生レスポンス確認（item_id検証用・読み取りのみ） */
+function debugGetOrderRawTestOrder() {
+  debugGetOrderRawFor_('tokyoflower', '240364-20260827-0309500953');
+}
+
 // 毎時実行：受注取得→紐づけ→クーポン判定→メール送信
 function runPipeline() {
   const tenants = listActiveTenants();

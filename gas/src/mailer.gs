@@ -83,9 +83,29 @@ function buildFollowMailVars_(order, creds) {
   return {
     buyer_name:     order.buyer_name || 'お客様',
     shop_name:      creds.shop_name,
-    ship_date:      order.ship_date || '先日',
+    ship_date:      formatShipDateJa_(order.ship_date),
     shop_signature: creds.shop_signature,
+    review_url:     buildReviewUrl_(order.order_number),
   };
+}
+
+/**
+ * ship_date（Date型/文字列いずれも可）を「yyyy/MM/dd」の日本語向け表記に整形する。
+ * 値が無い/不正な場合は「先日」を返す（文面が破綻しないためのフォールバック）。
+ */
+function formatShipDateJa_(value) {
+  const str = toJstDateString_(value); // config.gs の既存関数（yyyy-MM-dd を返す）
+  if (!str) return '先日';
+  return str.replace(/-/g, '/');
+}
+
+/**
+ * 対象注文のレビュー投稿画面への直リンクを生成する。
+ * key=注文番号のみ指定（subkey=内部商品IDは未保持のため省略。省略時は
+ * 注文単位のレビュー画面に遷移し、そこから対象商品のレビューを書ける）。
+ */
+function buildReviewUrl_(orderNumber) {
+  return `https://manager.review.rakuten.co.jp/?menu=write&act=id&service_id=1&key=${encodeURIComponent(orderNumber)}`;
 }
 
 // =========================================================

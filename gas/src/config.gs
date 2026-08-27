@@ -63,6 +63,7 @@ function isOnOrAfterGoLiveDate_(shipDate, goLiveDateStr) {
 const KNOWN_TEMPLATE_PLACEHOLDERS_ = [
   'buyer_name', 'shop_name', 'ship_date', 'discount',
   'coupon_valid_until', 'coupon_get_url', 'shop_signature',
+  'review_url',
 ];
 
 /**

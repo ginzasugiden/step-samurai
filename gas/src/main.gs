@@ -19,7 +19,7 @@ function runPipeline() {
       linkOrdersReviews(tenant.tenant_id);
       const targets = evaluateCoupons(tenant.tenant_id);
       targets.forEach(t => {
-        if (isDryRun_()) {
+        if (isTenantDryRun_(tenant.tenant_id)) {
           Logger.log(`[DRY_RUN] would issue coupon: ${JSON.stringify(t)}`);
           return;
         }

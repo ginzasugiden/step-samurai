@@ -42,19 +42,56 @@ function getMasterRow_(tenantId) {
   return { get };
 }
 
-function listActiveTenants() {
+/**
+ * テナントの status:
+ *   setup    … 搭載作業中。パイプライン対象外。管理画面・分析画面へのログインは可
+ *   paused   … 一時停止。パイプライン対象外。ログイン可
+ *   active   … 稼働中。毎時パイプラインの対象
+ *   disabled … 無効。シートにもアクセスさせない
+ */
+const TENANT_STATUSES_ = ['setup', 'paused', 'active', 'disabled'];
+const TENANT_ACCESSIBLE_STATUSES_ = ['setup', 'paused', 'active'];
+
+/** マスター tenants タブの全行（status 問わず） */
+function listAllTenants_() {
+  _masterRowsCache = null;
   const sheet = getMasterSheet_();
   const data  = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
   const header = data[0];
   const idx    = col => header.indexOf(col);
   return data.slice(1)
-    .filter(row => row[idx('tenant_id')] && row[idx('status')] === 'active')
+    .filter(row => row[idx('tenant_id')])
     .map(row => ({
-      tenant_id:      row[idx('tenant_id')],
-      shop_name:      row[idx('shop_name')],
-      spreadsheet_id: row[idx('spreadsheet_id')],
+      tenant_id:      String(row[idx('tenant_id')]),
+      shop_name:      String(row[idx('shop_name')] || ''),
+      spreadsheet_id: String(row[idx('spreadsheet_id')] || ''),
+      status:         String(row[idx('status')] || ''),
+      shop_email:     String(row[idx('shop_email')] || ''),
+      cc_email:       String(row[idx('cc_email')] || ''),
     }));
+}
+
+/** 毎時パイプラインの対象（status=active のみ） */
+function listActiveTenants() {
+  return listAllTenants_().filter(t => t.status === 'active');
+}
+
+/** 管理者用：status を更新する（値は TENANT_STATUSES_ に限定） */
+function setTenantStatus_(tenantId, status) {
+  if (!TENANT_STATUSES_.includes(status)) return { ok: false, error: 'invalid_status' };
+  const sheet  = getMasterSheet_();
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0];
+  const idIdx  = header.indexOf('tenant_id'), stIdx = header.indexOf('status');
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx]) === tenantId) {
+      sheet.getRange(i + 1, stIdx + 1).setValue(status);
+      _masterRowsCache = null;
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'tenant_not_found' };
 }
 
 // ===== 既存 api_key シートからRMS資格情報を取得 =====
@@ -122,13 +159,14 @@ function getRmsCredentials(tenantId) {
     reply_to:       shopEmail,
     cc_email:       ccEmail,
     inquiry_url:    `https://inquiry.my.rakuten.co.jp/shop/${sid}`,
-    shop_signature: buildSignature_(sname, sid),
+    shop_signature: buildSignature_(sname, sid, tenantId),
   };
 }
 
-function buildSignature_(sname, sid) {
-  const override = PropertiesService.getScriptProperties()
-    .getProperty('SHOP_SIGNATURE__OVERRIDE');
+function buildSignature_(sname, sid, tenantId) {
+  // 署名の上書きはテナントの settings.shop_signature_override（config.gs）。
+  // 旧グローバル SHOP_SIGNATURE__OVERRIDE は tokyoflower のみフォールバックとして参照する。
+  const override = tenantId ? getTenantSignatureOverride_(tenantId) : null;
   if (override) return override;
   return [
     sname,
@@ -167,19 +205,27 @@ function createTenant(shopName, tenantId, shopEmail, ccEmail) {
   ]);
 
   // マスター管理シートに追加（shop_email/cc_email 含む）
+  // 新規テナントは status=setup で登録する（毎時パイプラインの対象外）。
+  // 搭載完了後に管理者が active に切り替える（admin_api.gs set_tenant_status のチェックを通す）。
   const master = getMasterSheet_();
   master.appendRow([
-    tenantId, shopName, ss.getId(), 'active',
+    tenantId, shopName, ss.getId(), 'setup',
     shopEmail || '', ccEmail || ''
   ]);
+  _masterRowsCache = null;
 
-  Logger.log(`テナント作成完了: ${tenantId} / シートID: ${ss.getId()}`);
+  // settings / templates タブと運用ガード設定（dry_run=true, go_live_date 空 = 送らない）を投入
+  setupTenantConfigSheets_(tenantId);
+
+  Logger.log(`テナント作成完了: ${tenantId} / シートID: ${ss.getId()} / status=setup`);
   return ss.getId();
 }
 
 function getTenantSpreadsheet(tenantId) {
-  const tenant = listActiveTenants().find(t => t.tenant_id === tenantId);
-  if (!tenant) throw new Error(`稼働テナントが見つかりません: ${tenantId}`);
+  // setup/paused のテナントも管理画面・分析画面からは自分のシートを読める。
+  // disabled と未登録は拒否。パイプライン側は listActiveTenants() で active のみを回す。
+  const tenant = listAllTenants_().find(t => t.tenant_id === tenantId && TENANT_ACCESSIBLE_STATUSES_.includes(t.status));
+  if (!tenant) throw new Error(`テナントが見つからないか無効です: ${tenantId}`);
   return SpreadsheetApp.openById(tenant.spreadsheet_id);
 }
 

@@ -59,7 +59,7 @@ function sendFollowMail(tenantId, order) {
   const body    = renderTemplate_(tpl.body, vars);
   const to      = resolveRecipient_(order.masked_email);
 
-  if (isDryRun_()) {
+  if (isTenantDryRun_(tenantId)) {
     Logger.log(`[DRY_RUN] would send follow mail to ${to} (order=${order.order_number}) subject=${subject}`);
     return;
   }
@@ -128,7 +128,7 @@ function sendCouponMail(tenantId, order, coupon) {
   const body    = renderTemplate_(tpl.body, vars);
   const to      = resolveRecipient_(order.masked_email);
 
-  if (isDryRun_()) {
+  if (isTenantDryRun_(tenantId)) {
     Logger.log(`[DRY_RUN] would send coupon mail to ${to} (order=${order.order_number}, coupon=${coupon.coupon_id}) subject=${subject}`);
     return;
   }
@@ -180,9 +180,9 @@ function sendPendingMails(tenantId) {
   const idx    = col => header.indexOf(col);
   const now    = new Date();
 
-  const goLiveDate = getGoLiveDate_();
+  const goLiveDate = getTenantGoLiveDate_(tenantId);
   if (!goLiveDate) {
-    Logger.log(`[${tenantId}] sendPendingMails: GO_LIVE_DATE未設定のため全スキップ`);
+    Logger.log(`[${tenantId}] sendPendingMails: settings.go_live_date 未設定のため全スキップ（fail-closed）`);
     return;
   }
 
@@ -192,7 +192,7 @@ function sendPendingMails(tenantId) {
     return;
   }
 
-  const excludedOrders = getExcludedOrderNumbers_();
+  const excludedOrders = getTenantExcludedOrders_(tenantId);
 
   data.slice(1).forEach(row => {
     if (!row[idx('order_number')]) return;

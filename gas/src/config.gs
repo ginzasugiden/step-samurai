@@ -351,7 +351,132 @@ function setupTenantConfigSheets_(tenantId) {
     Logger.log(`[${tenantId}] templates タブは既に存在します（作成スキップ）`);
   }
 
+  result.settingsKeysAdded = ensureTenantSettingsKeys_(tenantId);
   invalidateTenantConfigCache_(tenantId);
   Logger.log(`setupTenantConfigSheets_ 完了: ${JSON.stringify(result)}`);
   return result;
+}
+
+// =========================================================
+// テナント別の運用ガード（旧: Script Properties のグローバル値）
+//
+// GO_LIVE_DATE / DRY_RUN / EXCLUDE_ORDERS / SHOP_SIGNATURE__OVERRIDE は元々スクリプト全体で
+// 1つの値しか持てず、2店舗目を有効化した瞬間に tokyoflower の稼働開始日が他店にも適用される
+// （＝他店の過去注文にフォローメールが飛ぶ）経路があった。以下はすべてテナントの settings タブから読む。
+//
+// 互換: tokyoflower に限り、settings に値が無い場合は旧グローバル値へフォールバックする
+// （移行漏れで本番が止まらないための保険。ensureTenantSettingsKeys_ で settings 側に移してしまえば不要になる）。
+// tokyoflower 以外はフォールバックせず fail-closed（未設定＝送らない）。
+// =========================================================
+
+const LEGACY_GLOBAL_FALLBACK_TENANT_ = 'tokyoflower';
+
+/** テナントの稼働開始日 'yyyy-MM-dd'。未設定/不正なら null（呼び出し側で全スキップ） */
+function getTenantGoLiveDate_(tenantId) {
+  const raw = getTenantSettingValue_(tenantId, 'go_live_date');
+  if (raw) return toJstDateString_(raw);
+  if (tenantId === LEGACY_GLOBAL_FALLBACK_TENANT_) {
+    const g = PropertiesService.getScriptProperties().getProperty('GO_LIVE_DATE');
+    return g ? toJstDateString_(g) : null;
+  }
+  return null;
+}
+
+/**
+ * テナントの DRY_RUN。グローバル DRY_RUN=true は全テナント共通のキルスイッチとして常に優先。
+ * settings.dry_run が 'true' ならそのテナントのみ実送信・実発行を止める。
+ * settings に行が無いテナントは安全側（true）。tokyoflower のみ旧グローバル値に従う。
+ */
+function isTenantDryRun_(tenantId) {
+  if (isDryRun_()) return true;
+  const raw = getTenantSettingValue_(tenantId, 'dry_run');
+  if (raw === null) return tenantId !== LEGACY_GLOBAL_FALLBACK_TENANT_;
+  return String(raw).toLowerCase() === 'true';
+}
+
+/** テナントの一時除外注文番号（settings.exclude_orders カンマ区切り）。tokyoflower は旧 EXCLUDE_ORDERS も合算 */
+function getTenantExcludedOrders_(tenantId) {
+  const set = new Set();
+  const add = raw => String(raw || '').split(',').map(s => s.trim()).filter(Boolean).forEach(s => set.add(s));
+  add(getTenantSettingValue_(tenantId, 'exclude_orders'));
+  if (tenantId === LEGACY_GLOBAL_FALLBACK_TENANT_) {
+    add(PropertiesService.getScriptProperties().getProperty('EXCLUDE_ORDERS'));
+  }
+  return set;
+}
+
+/** テナントの署名上書き（settings.shop_signature_override）。空なら null */
+function getTenantSignatureOverride_(tenantId) {
+  const raw = getTenantSettingValue_(tenantId, 'shop_signature_override');
+  if (raw) return String(raw);
+  if (tenantId === LEGACY_GLOBAL_FALLBACK_TENANT_) {
+    return PropertiesService.getScriptProperties().getProperty('SHOP_SIGNATURE__OVERRIDE') || null;
+  }
+  return null;
+}
+
+/**
+ * settings タブに存在すべきキー一覧と既定値。
+ * editable_by_tenant=FALSE のキーは管理者（ADMIN_TOKEN）のみ変更できる。
+ * defaultFor(tenantId) は tokyoflower の場合に旧グローバル値を初期値として引き継ぐ。
+ */
+const TENANT_SETTING_DEFS_ = [
+  { key: 'follow_days_after_ship', value: '5',  description: 'フォローメールを送る発送後の経過日数', editable: 'TRUE' },
+  { key: 'coupon_valid_days',      value: '30', description: 'クーポンの有効期間（発行開始からの日数）', editable: 'TRUE' },
+  { key: 'coupon_rules',
+    value: JSON.stringify([{ rule_id: 'first_purchase', discount: 300, enabled: true }, { rule_id: 'repeat_purchase', discount: 300, enabled: true }]),
+    description: 'クーポンルール(JSON配列)。rule_id/discount/enabledのみ編集可能', editable: 'FALSE' },
+  { key: 'go_live_date', value: '', description: '稼働開始日(yyyy-MM-dd)。この日以降に発送された注文だけがフォロー対象。未設定なら送信しない', editable: 'FALSE',
+    defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('GO_LIVE_DATE') || '') : '' },
+  { key: 'dry_run', value: 'true', description: 'true の間はこの店舗のメール送信・クーポン発行を行わない（ログのみ）', editable: 'FALSE',
+    defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (isDryRun_() ? 'true' : 'false') : 'true' },
+  { key: 'exclude_orders', value: '', description: '一時的にフォロー対象から外す注文番号（カンマ区切り）', editable: 'FALSE',
+    defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('EXCLUDE_ORDERS') || '') : '' },
+  { key: 'shop_signature_override', value: '', description: 'メール署名を上書きする場合に記入（空なら店舗名＋問い合わせURLを自動生成）', editable: 'TRUE',
+    defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('SHOP_SIGNATURE__OVERRIDE') || '') : '' },
+];
+
+/**
+ * settings タブに無いキーを既定値で追記する（冪等・既存行は触らない）。戻り値: 追加したキー配列。
+ * settings タブ自体が無ければ setupTenantConfigSheets_ を先に呼ぶこと。
+ */
+function ensureTenantSettingsKeys_(tenantId) {
+  const ss    = getTenantSpreadsheet(tenantId);
+  const sheet = ss.getSheetByName('settings');
+  if (!sheet) return [];
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const keyIdx = header.indexOf('key');
+  const existing = new Set(data.slice(1).map(r => String(r[keyIdx] || '')));
+  const added = [];
+  TENANT_SETTING_DEFS_.forEach(def => {
+    if (existing.has(def.key)) return;
+    const value = def.defaultFor ? def.defaultFor(tenantId) : def.value;
+    sheet.appendRow([def.key, value, def.description, def.editable]);
+    added.push(def.key);
+  });
+  if (added.length) invalidateTenantConfigCache_(tenantId);
+  return added;
+}
+
+/** 管理者用：editable_by_tenant に関係なく settings の値を書き換える。無いキーは追加する */
+function setTenantSettingValueAdmin_(tenantId, key, value) {
+  const ss    = getTenantSpreadsheet(tenantId);
+  const sheet = ss.getSheetByName('settings');
+  if (!sheet) return { ok: false, error: 'settings_sheet_missing' };
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const keyIdx = header.indexOf('key'), valueIdx = header.indexOf('value');
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][keyIdx]) === key) {
+      sheet.getRange(i + 1, valueIdx + 1).setValue(value);
+      invalidateTenantConfigCache_(tenantId);
+      return { ok: true };
+    }
+  }
+  const def = TENANT_SETTING_DEFS_.find(d => d.key === key);
+  if (!def) return { ok: false, error: 'unknown_key' };
+  sheet.appendRow([key, value, def.description, def.editable]);
+  invalidateTenantConfigCache_(tenantId);
+  return { ok: true };
 }

@@ -127,3 +127,50 @@ function resetBackfillCursorTokyoflower() {
 function showBackfillCursorTokyoflower() {
   Logger.log(PropertiesService.getScriptProperties().getProperty(backfillCursorKey_('tokyoflower')) || '(未設定: 次回は13ヶ月前から開始)');
 }
+
+// =========================================================
+// 全テナント版（管理者APIから起動）
+// カーソルが設定されているテナントを1つ選び1ヶ月処理 → 残りがあれば2分後に自分を再実行。
+// =========================================================
+const BACKFILL_ALL_FN_ = 'backfillAutoAll';
+
+function listBackfillPendingTenants_() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const prefix = 'ANALYTICS_BACKFILL_CURSOR__';
+  return Object.keys(props).filter(k => k.startsWith(prefix)).map(k => ({ tenantId: k.substring(prefix.length), cursor: props[k] }));
+}
+
+function scheduleBackfillAll_(minutes) {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === BACKFILL_ALL_FN_).forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger(BACKFILL_ALL_FN_).timeBased().after((minutes || 2) * 60 * 1000).create();
+}
+
+/** 管理者API backfill_start から呼ぶ。カーソルが無ければ13ヶ月前から開始し、自動継続トリガーを立てる */
+function startBackfill_(tenantId) {
+  const props = PropertiesService.getScriptProperties();
+  const key   = backfillCursorKey_(tenantId);
+  if (!props.getProperty(key)) props.setProperty(key, startYm_());
+  scheduleBackfillAll_(1);
+  return { cursor: props.getProperty(key) };
+}
+
+function backfillAutoAll() {
+  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === BACKFILL_ALL_FN_).forEach(t => ScriptApp.deleteTrigger(t));
+  const pending = listBackfillPendingTenants_();
+  if (pending.length === 0) { Logger.log('backfillAutoAll: 対象なし'); return; }
+  const target = pending[0];
+  try {
+    // 稼働中(active)でないテナントも対象にする（搭載作業中に過去データを入れるため）。disabled は getTenantSpreadsheet が拒否する
+    backfillStep_(target.tenantId);
+  } catch (e) {
+    Logger.log(`backfillAutoAll [${target.tenantId}]: エラーのため自動継続を停止: ${e.message}`);
+    notifyAdmin_(`[step-samurai] 遡及取得エラー（${target.tenantId}・自動継続停止）: ${e.message}`);
+    return;
+  }
+  if (listBackfillPendingTenants_().length > 0) {
+    scheduleBackfillAll_(2);
+    Logger.log('backfillAutoAll: 2分後に続行');
+  } else {
+    Logger.log('backfillAutoAll: 全テナント完了');
+  }
+}

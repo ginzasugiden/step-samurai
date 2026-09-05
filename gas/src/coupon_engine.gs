@@ -87,9 +87,9 @@ function evaluateCoupons(tenantId) {
       .map(row => `${row[1]}__${row[2]}`)
   );
 
-  const goLiveDate = getGoLiveDate_();
+  const goLiveDate = getTenantGoLiveDate_(tenantId);
   if (!goLiveDate) {
-    Logger.log(`[${tenantId}] evaluateCoupons: GO_LIVE_DATE未設定のため全スキップ`);
+    Logger.log(`[${tenantId}] evaluateCoupons: settings.go_live_date 未設定のため全スキップ（fail-closed）`);
     return [];
   }
 

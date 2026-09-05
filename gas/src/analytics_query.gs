@@ -136,32 +136,39 @@ function getAnalytics_(tenantId, payload) {
 // 分析の前提がデータ上で成り立つかを確認する。go-live 前に1回実行してログを確認する。
 // =========================================================
 function probeAnalyticsTokyoflower() {
-  const tenantId = 'tokyoflower';
+  const rows = probeAnalytics_('tokyoflower');
+  Logger.log('\n| 項目 | 値 |\n|---|---|\n' + rows.map(r => `| ${r[0]} | ${r[1]} |`).join('\n'));
+}
+
+/**
+ * 分析の前提がデータ上で成り立つかを確認する（読み取り専用）。
+ * 戻り値は [[項目, 値], ...]。GASエディタ用ラッパーと管理者API（probe_tenant）の両方から使う。
+ */
+function probeAnalytics_(tenantId) {
   const ss = getTenantSpreadsheet(tenantId);
   const out = [];
-  const line = (k, v) => out.push(`| ${k} | ${v} |`);
-  out.push('| 項目 | 値 |'); out.push('|---|---|');
+  const line = (k, v) => out.push([k, v]);
 
   line('p0_spreadsheet_timezone', ss.getSpreadsheetTimeZone());
   const ordersSheet = ss.getSheetByName('orders');
   const header = ordersSheet ? ordersSheet.getRange(1, 1, 1, ordersSheet.getLastColumn()).getValues()[0].map(String) : [];
-  line('p1_orders_header', header.join(', '));
   line('p1_analytics_columns_present', ANALYTICS_ORDER_COLUMNS_.map(c => `${c}=${header.indexOf(c) >= 0}`).join(' '));
 
   const orders = normalizeOrders_(analyticsReadSheet_(ss, 'orders'));
+  const dates  = orders.map(o => o.order_date).filter(Boolean).sort();
   line('p2_orders_rows', orders.length);
-  line('p2_orders_date_range', orders.length ? `${orders.map(o => o.order_date).filter(Boolean).sort()[0]} 〜 ${orders.map(o => o.order_date).filter(Boolean).sort().slice(-1)[0]}` : '-');
+  line('p2_orders_date_range', dates.length ? `${dates[0]} 〜 ${dates[dates.length - 1]}` : '-');
   line('p2_status_counts', JSON.stringify(orders.reduce((m, o) => { m[o.status] = (m[o.status] || 0) + 1; return m; }, {})));
   line('p3_order_datetime_hasTimeRate', orders.length ? `${Math.round(orders.filter(o => aggHour_(o.order_datetime) !== null).length / orders.length * 100)}%` : '-');
+  line('p3_goods_price_filledRate', orders.length ? `${Math.round(orders.filter(o => o.goods_price > 0).length / orders.length * 100)}%` : '-');
   line('p4_masked_email_missingRate', orders.length ? `${Math.round(orders.filter(o => !o.masked_email).length / orders.length * 100)}%` : '-');
   line('p4_purchase_count_gt1', orders.filter(o => o.purchase_count > 1).length);
 
   const reviews = normalizeReviews_(analyticsReadSheet_(ss, 'reviews'));
+  const orderSet = new Set(orders.map(o => o.order_number));
   line('p5_reviews_rows', reviews.length);
   line('p5_postedAt_hasTimeRate', reviews.length ? `${Math.round(reviews.filter(r => aggHour_(r.posted_at) !== null).length / reviews.length * 100)}%` : '-');
-  line('p5_postedAt_sample', reviews.slice(0, 3).map(r => r.posted_at).join(' / ') || '-');
   line('p5_rating_dist', JSON.stringify(reviews.reduce((m, r) => { m[r.rating] = (m[r.rating] || 0) + 1; return m; }, {})));
-  const orderSet = new Set(orders.map(o => o.order_number));
   line('p5_reviews_matched_to_orders', reviews.filter(r => orderSet.has(r.order_number)).length);
 
   const sends = normalizeSends_(analyticsReadSheet_(ss, 'sends'));
@@ -177,8 +184,7 @@ function probeAnalyticsTokyoflower() {
   line('p8_getAnalytics_ms', Date.now() - t0);
   line('p8_summary', JSON.stringify(res.summary || res));
   line('p8_warnings', (res.warnings || []).join(' / ') || '-');
-
-  Logger.log('\n' + out.join('\n'));
+  return out;
 }
 
 /**

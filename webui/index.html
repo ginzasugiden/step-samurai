@@ -35,6 +35,8 @@
     <button class="tab-btn" data-tab="templates">文面</button>
     <button class="tab-btn" data-tab="test">テスト送信</button>
     <button class="tab-btn" data-tab="history">履歴</button>
+    <button class="tab-btn" data-tab="reviews">レビュー取込</button>
+    <a class="tab-link" href="analytics.html">店舗分析 ↗</a>
   </nav>
 
   <main>
@@ -67,6 +69,17 @@
       <div class="table-wrap"><table id="sends-table"><thead></thead><tbody></tbody></table></div>
       <h3>クーポン発行</h3>
       <div class="table-wrap"><table id="coupons-table"><thead></thead><tbody></tbody></table></div>
+    </section>
+    <section id="tab-reviews" class="tab-panel">
+      <h2>レビューCSVの取込</h2>
+      <p class="hint">
+        RMS「レビューチェックツール」でダウンロードしたCSVをそのまま選択してください（列の順番や余分な列は自動判定します）。
+        同じCSVを何度取り込んでも重複しません。取り込むとレビュー率・評価分布に反映され、レビュー済みのお客様が判定されます。
+      </p>
+      <input id="review-file" type="file" accept=".csv,text/csv">
+      <button id="review-preview-btn">内容を確認</button>
+      <button id="review-import-btn" disabled>取り込む</button>
+      <pre id="review-result" class="result-box" hidden></pre>
     </section>
   </main>
 </div>

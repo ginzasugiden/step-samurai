@@ -24,7 +24,8 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
-const ADMIN_ACTIONS_ = ['list_tenants', 'issue_tenant_token'];
+// 管理者用アクションの一覧と実装は admin_api.gs（ADMIN_ACTIONS_ / handleAdminAction_）
+
 
 function doPost(e) {
   try {
@@ -37,36 +38,6 @@ function doPost(e) {
     return handleTenantAction_(req);
   } catch (err) {
     // JSON.parse失敗などの想定外エラー。スタックトレースは返さない。
-    return jsonResponse_({ ok: false, error: 'internal_error' });
-  }
-}
-
-// ===== 管理者用アクション（ADMIN_TOKEN認証） =====
-
-function handleAdminAction_(req) {
-  try {
-    requireAdmin_(req.token);
-  } catch (e) {
-    return jsonResponse_({ ok: false, error: 'unauthorized' });
-  }
-
-  const payload = req.payload || {};
-
-  try {
-    switch (req.action) {
-      case 'list_tenants':
-        return jsonResponse_({ ok: true, tenants: listActiveTenants() });
-
-      case 'issue_tenant_token': {
-        if (!payload.tenant_id) return jsonResponse_({ ok: false, error: 'tenant_id_required' });
-        const token = issueTenantToken_(payload.tenant_id);
-        return jsonResponse_({ ok: true, tenant_id: payload.tenant_id, token: token });
-      }
-
-      default:
-        return jsonResponse_({ ok: false, error: 'unknown_action' });
-    }
-  } catch (e) {
     return jsonResponse_({ ok: false, error: 'internal_error' });
   }
 }
@@ -105,6 +76,14 @@ function handleTenantAction_(req) {
       case 'get_analytics':
         // 読み取り専用。期間は payload.from/to（yyyy-MM-dd）。個人情報は含まない集計値のみ返す。
         return jsonResponse_(getAnalytics_(tenantId, payload));
+
+      case 'import_reviews_preview':
+        // レビューCSV（RMSレビューチェックツールのダウンロード）を解析して件数と先頭数行を返す。書き込まない
+        return jsonResponse_(importReviewsFromCsv_(tenantId, String(payload.csv || ''), true));
+
+      case 'import_reviews':
+        // 解析して reviews タブへ upsert し、orders との紐づけを更新する
+        return jsonResponse_(importReviewsFromCsv_(tenantId, String(payload.csv || ''), false));
 
       default:
         return jsonResponse_({ ok: false, error: 'unknown_action' });
@@ -161,7 +140,7 @@ function handleSendTestMail_(tenantId) {
   const body    = renderTemplate_(tpl.body, vars);
   const to      = creds.from_email;
 
-  if (isDryRun_()) {
+  if (isTenantDryRun_(tenantId)) {
     Logger.log(`[DRY_RUN] send_test_mail: 実送信せず内容のみログ出力 tenant=${tenantId} to=${to} subject=${subject}`);
     return jsonResponse_({ ok: true, dry_run: true, to: to, subject: subject });
   }

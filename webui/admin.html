@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>step-samurai 運営管理</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="login-box">
+    <h1>step-samurai 運営管理</h1>
+    <p class="hint">サービス運営者専用。ADMIN_TOKEN でログインします（店舗のトークンでは入れません）。ブラウザには保存されません。</p>
+    <label for="api-url">API のURL</label>
+    <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
+    <label for="api-token">管理者トークン</label>
+    <input id="api-token" type="password" autocomplete="off">
+    <button id="login-btn">ログイン</button>
+    <p id="login-error" class="error" hidden></p>
+  </div>
+</div>
+
+<div id="app-screen" class="screen" hidden>
+  <header class="app-header">
+    <h1>step-samurai 運営管理</h1>
+    <div><button id="reload-btn" class="secondary">再読込</button> <button id="logout-btn" class="secondary">ログアウト</button></div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>システム状態</h2>
+      <div id="system-status" class="mono"></div>
+    </section>
+
+    <section class="card">
+      <h2>テナント一覧</h2>
+      <div class="table-wrap"><table id="tenant-table"><thead>
+        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>認証情報</th><th>稼働開始日</th><th>dry_run</th><th>トークン</th><th>遡及</th><th></th></tr>
+      </thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <h2>新規テナント作成</h2>
+      <p class="hint">作成すると店舗専用スプレッドシート（orders/reviews/sends/coupons/settings/templates）が作られ、状態 <code>setup</code>（パイプライン対象外・dry_run=true）で登録されます。</p>
+      <div class="form-grid">
+        <label>tenant_id <input id="new-id" type="text" placeholder="例: hanaya-osaka（英小文字・数字・-・_）"></label>
+        <label>店舗名 <input id="new-name" type="text" placeholder="例: 花屋おおさか"></label>
+        <label>店舗メール（差出人） <input id="new-email" type="text" placeholder="RMSに登録の店舗連絡先メール"></label>
+        <label>控えメール（任意） <input id="new-cc" type="text"></label>
+      </div>
+      <button id="create-btn">作成</button>
+      <pre id="create-result" class="result-box" hidden></pre>
+    </section>
+
+    <section class="card" id="detail-card" hidden>
+      <h2>テナント: <span id="detail-id"></span></h2>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="checklist">搭載チェック</button>
+        <button class="tab-btn" data-tab="settings">設定</button>
+        <button class="tab-btn" data-tab="probe">データ確認</button>
+        <button class="tab-btn" data-tab="ops">操作</button>
+      </nav>
+
+      <div id="tab-checklist" class="tab-panel active">
+        <ol id="checklist"></ol>
+      </div>
+
+      <div id="tab-settings" class="tab-panel">
+        <p class="hint">管理者は「編集不可」の項目も変更できます。<code>go_live_date</code> はこの日以降に発送された注文だけがフォロー対象。<code>dry_run</code> を false にした瞬間から実送信されます。</p>
+        <div id="settings-list" class="card-list"></div>
+      </div>
+
+      <div id="tab-probe" class="tab-panel">
+        <button id="probe-btn">データ確認を実行</button>
+        <div class="table-wrap"><table id="probe-table"><tbody></tbody></table></div>
+      </div>
+
+      <div id="tab-ops" class="tab-panel">
+        <div class="ops-grid">
+          <div><h3>認証情報</h3><button id="cred-btn">RMS 接続チェック</button><pre id="cred-result" class="result-box" hidden></pre></div>
+          <div><h3>遡及取得（13ヶ月）</h3><button id="backfill-btn">開始 / 再開</button> <button id="backfill-status-btn" class="secondary">状況</button> <button id="backfill-reset-btn" class="secondary">カーソル削除</button><pre id="backfill-result" class="result-box" hidden></pre></div>
+          <div><h3>店舗トークン</h3><button id="token-btn">新規発行</button> <button id="revoke-btn" class="secondary">全失効</button><pre id="token-result" class="result-box" hidden></pre><p class="hint">発行した平文は一度しか表示されません。店舗へ安全な手段で渡してください。</p></div>
+          <div><h3>状態変更</h3>
+            <select id="status-select"><option value="setup">setup</option><option value="paused">paused</option><option value="active">active</option><option value="disabled">disabled</option></select>
+            <button id="status-btn">変更</button><pre id="status-result" class="result-box" hidden></pre></div>
+          <div><h3>SMTPブリッジ設定</h3><button id="bridge-btn" class="secondary">config.php 追記内容を表示</button><pre id="bridge-result" class="result-box" hidden></pre></div>
+          <div><h3>その他</h3><button id="setup-sheets-btn" class="secondary">settings/templates 補完</button> <button id="columns-btn" class="secondary">分析列を追加</button><pre id="misc-result" class="result-box" hidden></pre></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="admin.js"></script>
+</body>
+</html>

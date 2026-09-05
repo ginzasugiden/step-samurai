@@ -311,3 +311,52 @@ function renderTable(tableId, rows) {
     tbody.appendChild(tr);
   });
 }
+
+
+// ===== レビュー取込タブ =====
+
+let reviewCsvText = '';
+
+function readFileAsText(file, encoding) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('ファイルを読めませんでした'));
+    r.readAsText(file, encoding);
+  });
+}
+
+// RMS の CSV は Shift_JIS のことが多い。まず UTF-8 で読み、置換文字(U+FFFD)が多ければ Shift_JIS で読み直す
+async function readCsvSmart(file) {
+  const utf8 = await readFileAsText(file, 'utf-8');
+  const bad = (utf8.match(/\uFFFD/g) || []).length;
+  if (bad > 0 && bad > utf8.length / 200) return readFileAsText(file, 'shift_jis');
+  return utf8;
+}
+
+document.getElementById('review-preview-btn').addEventListener('click', async () => {
+  const file = document.getElementById('review-file').files[0];
+  const box = document.getElementById('review-result');
+  const importBtn = document.getElementById('review-import-btn');
+  importBtn.disabled = true;
+  if (!file) { box.hidden = false; box.textContent = 'CSVファイルを選択してください。'; return; }
+  box.hidden = false; box.textContent = '解析中...';
+  try {
+    reviewCsvText = await readCsvSmart(file);
+    const res = await callApi('import_reviews_preview', { csv: reviewCsvText });
+    if (!res.ok) { box.textContent = '解析できませんでした: ' + res.error + (res.missing ? '（見つからない列: ' + res.missing.join(', ') + '）' : '') + (res.header ? '\n先頭行: ' + res.header.join(' | ') : ''); return; }
+    box.textContent = `読み取り ${res.parsed_rows}行 / 取込対象 ${res.valid_rows}件\n列の対応: ${JSON.stringify(res.column_map)}\n先頭:\n` + res.sample.map(s => `  ${s.order_number}  ★${s.rating}  ${s.posted_at}`).join('\n');
+    importBtn.disabled = res.valid_rows === 0;
+  } catch (e) { box.textContent = '通信エラー: ' + e.message; }
+});
+
+document.getElementById('review-import-btn').addEventListener('click', async () => {
+  const box = document.getElementById('review-result');
+  const btn = document.getElementById('review-import-btn');
+  btn.disabled = true; btn.textContent = '取込中...';
+  try {
+    const res = await callApi('import_reviews', { csv: reviewCsvText });
+    box.textContent = res.ok ? `取込完了: 追加 ${res.inserted}件 / 更新 ${res.updated}件（注文との紐づけ ${res.linked ? '更新済' : '未更新'}）` : '取込失敗: ' + res.error;
+  } catch (e) { box.textContent = '通信エラー: ' + e.message; }
+  finally { btn.textContent = '取り込む'; }
+});

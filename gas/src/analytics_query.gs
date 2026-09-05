@@ -52,6 +52,8 @@ function normalizeOrders_(rows) {
     item_code:      String(r.item_code || ''),
     item_name:      String(r.item_name || ''),
     amount:         Number(r.amount) || 0,
+    goods_price:    Number(r.goods_price) || 0,
+    coupon_shop_price: Number(r.coupon_shop_price) || 0,
     units:          Number(r.units) || 0,
     purchase_count: Number(r.purchase_count) || 1,
     prefecture:     String(r.prefecture || ''),

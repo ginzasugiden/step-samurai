@@ -6,13 +6,14 @@
  *   units             注文内の合計点数
  *   coupon_shop_price 店舗負担クーポン割引額（RMS couponShopPrice）
  *   coupon_codes      使用クーポンコード（カンマ区切り）。coupons タブと突合して利用率を出す
+ *   goods_price       商品代金合計（RMS goodsPrice。送料・ラッピング等を含まない＝RMS店舗カルテの売上に近い）
  *
  * 列の追加は fetchOrders の冒頭から毎時呼ばれる（ヘッダ確認のみなので軽量・冪等）。
  * 既存の buildOrderRow_ はヘッダに存在する列だけを埋めるため、
  * この関数を実行しなくても既存機能は壊れない（新列が空のままになるだけ）。
  */
 
-const ANALYTICS_ORDER_COLUMNS_ = ['order_datetime', 'units', 'coupon_shop_price', 'coupon_codes'];
+const ANALYTICS_ORDER_COLUMNS_ = ['order_datetime', 'units', 'coupon_shop_price', 'coupon_codes', 'goods_price'];
 
 /**
  * orders タブに分析用列が無ければ末尾に追加する（冪等）。

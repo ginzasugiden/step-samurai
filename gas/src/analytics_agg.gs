@@ -81,6 +81,10 @@ function computeAnalytics_(orders, reviews, sends, coupons, opts) {
 
   // ---- 基本 ----
   const sales = pop.reduce((s, o) => s + (Number(o.amount) || 0), 0);
+  const goodsSales = pop.reduce((s, o) => s + (Number(o.goods_price) || 0), 0);
+  const couponShop = pop.reduce((s, o) => s + (Number(o.coupon_shop_price) || 0), 0);
+  const goodsMissing = pop.filter(o => !o.goods_price).length;
+  if (pop.length > 0 && goodsMissing > 0) warnings.push(`商品代金(goods_price)が未取得の注文が ${goodsMissing}件あります（遡及取得前のデータ）。RMS準拠売上はそれらを含みません`);
   const units = pop.reduce((s, o) => s + (Number(o.units) || 0), 0);
 
   // ---- 顧客区分 ----
@@ -102,8 +106,8 @@ function computeAnalytics_(orders, reviews, sends, coupons, opts) {
     const w = aggWeekday_(o.order_date || o.order_datetime);
     if (w !== null) weekday[w]++;
     const d = aggDateOnly_(o.order_date) || aggDateOnly_(o.order_datetime);
-    const rec = dailyMap[d] || (dailyMap[d] = { date: d, orders: 0, sales: 0, new: 0, repeat: 0, unknown: 0 });
-    rec.orders++; rec.sales += Number(o.amount) || 0; rec[aggCustomerType_(o)]++;
+    const rec = dailyMap[d] || (dailyMap[d] = { date: d, orders: 0, sales: 0, goods_sales: 0, new: 0, repeat: 0, unknown: 0 });
+    rec.orders++; rec.sales += Number(o.amount) || 0; rec.goods_sales += Number(o.goods_price) || 0; rec[aggCustomerType_(o)]++;
   });
   if (noTime > 0) {
     warnings.push(`受注時刻が未取得の注文が ${noTime}件あります（遡及取得前のデータ）。時間帯別グラフはそれらを含みません`);
@@ -173,8 +177,8 @@ function computeAnalytics_(orders, reviews, sends, coupons, opts) {
   const monthlyMap = {};
   pop.forEach(o => {
     const ym = (aggDateOnly_(o.order_date) || aggDateOnly_(o.order_datetime)).slice(0, 7);
-    const m = monthlyMap[ym] || (monthlyMap[ym] = { ym: ym, orders: 0, sales: 0, new: 0, repeat: 0, unknown: 0, reviews: 0, follow_sent: 0 });
-    m.orders++; m.sales += Number(o.amount) || 0; m[aggCustomerType_(o)]++;
+    const m = monthlyMap[ym] || (monthlyMap[ym] = { ym: ym, orders: 0, sales: 0, goods_sales: 0, new: 0, repeat: 0, unknown: 0, reviews: 0, follow_sent: 0 });
+    m.orders++; m.sales += Number(o.amount) || 0; m.goods_sales += Number(o.goods_price) || 0; m[aggCustomerType_(o)]++;
     if (reviewByOrder[String(o.order_number)] || o.review_linked) m.reviews++;
     if (followSentSet.has(String(o.order_number))) m.follow_sent++;
   });
@@ -186,6 +190,9 @@ function computeAnalytics_(orders, reviews, sends, coupons, opts) {
       orders:            pop.length,
       cancelled_excluded: cancelled,
       sales:             sales,
+      goods_sales:       goodsSales,
+      coupon_shop_total: couponShop,
+      goods_sales_net:   goodsSales - couponShop,
       avg_order:         pop.length ? Math.round(sales / pop.length) : 0,
       units:             units,
       new:               customer.new,

@@ -172,6 +172,7 @@ function buildOrderRow_(header, order, existingRow) {
   set('units',          units);
   set('coupon_shop_price', Number(order.couponShopPrice) || 0);
   set('coupon_codes',   (order.CouponModelList || []).map(c => c.couponCode).filter(Boolean).join(','));
+  set('goods_price',    Number(order.goodsPrice) || 0);
   set('prefecture',     orderer.prefecture || pkg.SenderModel?.prefecture || '');
   set('ship_date',      shipDate);
   set('status',         status);

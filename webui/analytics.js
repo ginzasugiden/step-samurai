@@ -115,7 +115,8 @@ function render(d) {
 
   const kpis = [
     ['受注件数', num(s.orders), `キャンセル除外 ${num(s.cancelled_excluded)}件`],
-    ['売上金額', yen(s.sales), `客単価 ${yen(s.avg_order)}`],
+    ['売上（商品代金・RMS準拠）', yen(s.goods_sales), `店舗負担クーポン控除後 ${yen(s.goods_sales_net)}`],
+    ['請求総額（送料・ラッピング込）', yen(s.sales), `客単価 ${yen(s.avg_order)}`],
     ['新規 / リピート', `${num(s.new)} / ${num(s.repeat)}`, `リピート率 ${s.repeat_rate}%　不明 ${num(s.unknown)}`],
     ['フォローメール送信率', `${s.follow_rate}%`, `${num(s.follow_sent)} / 発送済 ${num(s.shipped)}`],
     ['レビュー率', `${s.review_rate}%`, `${num(s.reviewed_orders)}件　平均 ★${s.avg_rating}`],
@@ -136,7 +137,7 @@ function render(d) {
     type: 'bar',
     data: { labels: d.daily.map(x => x.date.slice(5)), datasets: [
       { label: '受注件数', data: d.daily.map(x => x.orders), yAxisID: 'y', backgroundColor: '#2f6fed' },
-      { label: '売上', data: d.daily.map(x => x.sales), yAxisID: 'y1', type: 'line', borderColor: '#e67e22', tension: 0.2, pointRadius: 2 },
+      { label: '売上（商品代金）', data: d.daily.map(x => x.goods_sales), yAxisID: 'y1', type: 'line', borderColor: '#e67e22', tension: 0.2, pointRadius: 2 },
     ] },
     options: { scales: { y: { beginAtZero: true, position: 'left' }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } } } },
   });
@@ -169,7 +170,7 @@ function render(d) {
 
   fillTable('t-items', d.top_items.map(i => [i.name, num(i.orders), yen(i.sales)]));
   fillTable('t-prefs', d.top_prefectures.map(p => [p.name, num(p.orders)]));
-  fillTable('t-monthly', d.monthly.map(m => [m.ym, num(m.orders), yen(m.sales), num(m.new), num(m.repeat), num(m.unknown), num(m.reviews), num(m.follow_sent)]));
+  fillTable('t-monthly', d.monthly.map(m => [m.ym, num(m.orders), yen(m.goods_sales), yen(m.sales), num(m.new), num(m.repeat), num(m.unknown), num(m.reviews), num(m.follow_sent)]));
 }
 
 function chart(id, config) {
@@ -199,14 +200,14 @@ document.getElementById('csv-btn').addEventListener('click', () => {
   lines.push(['サマリー', '値'].map(esc).join(','));
   Object.entries(d.summary).forEach(([k, v]) => lines.push([k, v].map(esc).join(',')));
   lines.push('');
-  lines.push(['日付', '受注', '売上', '新規', 'リピート', '不明'].map(esc).join(','));
-  d.daily.forEach(x => lines.push([x.date, x.orders, x.sales, x.new, x.repeat, x.unknown].map(esc).join(',')));
+  lines.push(['日付', '受注', '売上(商品代金)', '請求総額', '新規', 'リピート', '不明'].map(esc).join(','));
+  d.daily.forEach(x => lines.push([x.date, x.orders, x.goods_sales, x.sales, x.new, x.repeat, x.unknown].map(esc).join(',')));
   lines.push('');
   lines.push(['時間帯', '受注件数', '売上'].map(esc).join(','));
   d.hourly_orders.forEach((v, i) => lines.push([i, v, d.hourly_sales[i]].map(esc).join(',')));
   lines.push('');
-  lines.push(['月', '受注', '売上', '新規', 'リピート', '不明', 'レビュー', 'フォロー送信'].map(esc).join(','));
-  d.monthly.forEach(m => lines.push([m.ym, m.orders, m.sales, m.new, m.repeat, m.unknown, m.reviews, m.follow_sent].map(esc).join(',')));
+  lines.push(['月', '受注', '売上(商品代金)', '請求総額', '新規', 'リピート', '不明', 'レビュー', 'フォロー送信'].map(esc).join(','));
+  d.monthly.forEach(m => lines.push([m.ym, m.orders, m.goods_sales, m.sales, m.new, m.repeat, m.unknown, m.reviews, m.follow_sent].map(esc).join(',')));
   const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

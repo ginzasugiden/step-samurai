@@ -61,7 +61,7 @@ const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ' + name); } ca
 
 // ================= analytics_agg =================
 console.log('analytics_agg');
-const O = (n, d, extra) => Object.assign({ order_number: n, order_date: d.slice(0, 10), order_datetime: d.length > 10 ? d : '', buyer_key: 'b' + n, masked_email: 'x@fw', item_code: 'I', item_name: 'ばら', amount: 5000, units: 1, purchase_count: 1, prefecture: '東京都', ship_date: d.slice(0, 10), status: 'shipped', review_linked: false, coupon_codes: '' }, extra);
+const O = (n, d, extra) => Object.assign({ order_number: n, order_date: d.slice(0, 10), order_datetime: d.length > 10 ? d : '', buyer_key: 'b' + n, masked_email: 'x@fw', item_code: 'I', item_name: 'ばら', amount: 5000, goods_price: 4500, coupon_shop_price: 0, units: 1, purchase_count: 1, prefecture: '東京都', ship_date: d.slice(0, 10), status: 'shipped', review_linked: false, coupon_codes: '' }, extra);
 const base = [
   O('1', '2026-08-01 09:15:00'),
   O('2', '2026-08-01 21:30:00', { purchase_count: 2, amount: 8000 }),
@@ -89,7 +89,7 @@ const ordersWithUse = base.concat([O('7', '2026-09-01 10:00:00', { coupon_codes:
 const r = ctx.computeAnalytics_(ordersWithUse, reviews, sends, coupons, { from: '2026-08-01', to: '2026-08-31' });
 
 t('母集団: 期間内かつキャンセル除外', () => { assert.equal(r.summary.orders, 4); assert.equal(r.summary.cancelled_excluded, 1); });
-t('売上・客単価', () => { assert.equal(r.summary.sales, 23000); assert.equal(r.summary.avg_order, 5750); });
+t('売上・客単価', () => { assert.equal(r.summary.sales, 23000); assert.equal(r.summary.avg_order, 5750); assert.equal(r.summary.goods_sales, 18000); assert.equal(r.summary.goods_sales_net, 18000); assert.equal(r.monthly[0].goods_sales, 18000); });
 t('新規/リピート/不明', () => { assert.equal(r.summary.new, 2); assert.equal(r.summary.repeat, 1); assert.equal(r.summary.unknown, 1); });
 t('時間帯別: 時刻なし行は除外', () => { assert.equal(r.hourly_orders[9], 2); assert.equal(r.hourly_orders[21], 1); assert.equal(r.hourly_orders.reduce((a, b) => a + b), 3); });
 t('時刻なし警告', () => assert.ok(r.warnings.some(w => w.includes('受注時刻'))));
@@ -110,9 +110,9 @@ t('order_date が空でも order_datetime から日付を取る', () => { const 
 // ================= buildOrderRow_ / upsertOrdersBatch_ =================
 console.log('rakuten_api');
 const HEADER13 = ['order_number','order_date','buyer_key','masked_email','buyer_name','item_code','item_name','amount','purchase_count','prefecture','ship_date','status','review_linked'];
-const HEADER17 = HEADER13.concat(['order_datetime','units','coupon_shop_price','coupon_codes']);
+const HEADER17 = HEADER13.concat(['order_datetime','units','coupon_shop_price','coupon_codes','goods_price']);
 const rmsOrder = (n, prog, extra) => Object.assign({
-  orderNumber: n, orderDatetime: '2026-08-27T10:15:30+0900', orderProgress: prog, totalPrice: 6600, couponShopPrice: 300,
+  orderNumber: n, orderDatetime: '2026-08-27T10:15:30+0900', orderProgress: prog, totalPrice: 6600, goodsPrice: 6000, couponShopPrice: 300,
   OrdererModel: { emailAddress: 'm@pc.fw.rakuten.ne.jp', familyName: '山田', firstName: '花子', prefecture: '東京都' },
   PackageModelList: [{ ItemModelList: [{ itemNumber: 'rose-10', itemName: 'バラ10本', units: 2 }, { itemNumber: 'card', itemName: 'カード', units: 1 }], ShippingModelList: [{ shippingDate: '2026-08-28' }] }],
   CouponModelList: [{ couponCode: 'ABC' }],
@@ -122,9 +122,9 @@ t('buildOrderRow_: 17列ヘッダで全列が埋まる', () => {
   const row = ctx.buildOrderRow_(HEADER17, rmsOrder('N1', 500), null);
   const g = c => row[HEADER17.indexOf(c)];
   assert.equal(g('order_date'), '2026-08-27'); assert.equal(Object.prototype.toString.call(g('order_datetime')), '[object Date]'); assert.equal(Utilities.formatDate(g('order_datetime'),'Asia/Tokyo','yyyy-MM-dd HH:mm:ss'), '2026-08-27 10:15:30');
-  assert.equal(g('units'), 3); assert.equal(g('coupon_shop_price'), 300); assert.equal(g('coupon_codes'), 'ABC');
+  assert.equal(g('units'), 3); assert.equal(g('coupon_shop_price'), 300); assert.equal(g('goods_price'), 6000); assert.equal(g('coupon_codes'), 'ABC');
   assert.equal(g('status'), 'shipped'); assert.equal(g('ship_date'), '2026-08-28'); assert.equal(g('review_linked'), 'false');
-  assert.equal(g('purchase_count'), 1); assert.equal(row.length, 17);
+  assert.equal(g('purchase_count'), 1); assert.equal(row.length, 18);
 });
 t('buildOrderRow_: 13列ヘッダ（旧シート）でも壊れない', () => {
   const row = ctx.buildOrderRow_(HEADER13, rmsOrder('N1', 500), null);

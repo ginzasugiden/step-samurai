@@ -37,7 +37,7 @@
     <section class="card">
       <h2>テナント一覧</h2>
       <div class="table-wrap"><table id="tenant-table"><thead>
-        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>認証情報</th><th>稼働開始日</th><th>dry_run</th><th>トークン</th><th>遡及</th><th></th></tr>
+        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>RMSキー</th><th>SMTP</th><th>稼働開始日</th><th>dry_run</th><th>トークン</th><th>遡及</th><th></th></tr>
       </thead><tbody></tbody></table></div>
     </section>
 
@@ -50,7 +50,8 @@
         <label>店舗メール（差出人） <input id="new-email" type="text" placeholder="RMSに登録の店舗連絡先メール"></label>
         <label>控えメール（任意） <input id="new-cc" type="text"></label>
       </div>
-      <button id="create-btn">作成</button>
+      <button id="create-btn">作成のみ</button> <button id="invite-btn">作成して招待コードを発行</button>
+      <p class="hint">「招待コード」を店舗へ渡すと、店舗が <code>onboard.html</code> から自分で RMS キー・SMTP を登録します（暗号化保管・運営者には非表示）。有効期限7日・一回限り。</p>
       <pre id="create-result" class="result-box" hidden></pre>
     </section>
 

@@ -101,6 +101,13 @@ async function loadAll() {
   } catch (e) { /* 文面タブ表示は失敗してもログイン自体は継続させる */ }
 
   try {
+    const cs = await callApi('get_credentials_status', {});
+    document.getElementById('cred-status').textContent = cs.ok
+      ? `楽天API: ${cs.rms.registered ? '登録済（店舗ID ' + (cs.rms.sid || '-') + '、期限 ' + (cs.rms.expiry || '未設定') + '、更新 ' + cs.rms.updated_at + '）' : (cs.rms.legacy ? '運営者側で登録済' : '未登録')}\nSMTP: ${cs.smtp.registered ? '登録済（ID ' + cs.smtp.smtp_user_masked + '、更新 ' + cs.smtp.updated_at + '）' : '未登録（運営者側の設定を使用）'}`
+      : '取得できませんでした';
+  } catch (e) { /* 認証情報表示は失敗してもログイン自体は継続させる */ }
+
+  try {
     const histRes = await callApi('get_history', {});
     if (histRes.ok) {
       renderHistory(histRes.history);
@@ -359,4 +366,25 @@ document.getElementById('review-import-btn').addEventListener('click', async () 
     box.textContent = res.ok ? `取込完了: 追加 ${res.inserted}件 / 更新 ${res.updated}件（注文との紐づけ ${res.linked ? '更新済' : '未更新'}）` : '取込失敗: ' + res.error;
   } catch (e) { box.textContent = '通信エラー: ' + e.message; }
   finally { btn.textContent = '取り込む'; }
+});
+
+
+// ===== 認証情報タブ =====
+
+document.getElementById('cred-update-btn').addEventListener('click', async () => {
+  const box = document.getElementById('cred-result'); box.hidden = false; box.textContent = '楽天に接続テスト中...';
+  try {
+    const res = await callApi('update_credentials', { service_secret: document.getElementById('cred-secret').value.trim(), license_key: document.getElementById('cred-license').value.trim(), license_expiry: document.getElementById('cred-expiry').value });
+    box.textContent = res.ok ? `更新しました（期限 ${res.expiry || '未設定'}）` : (res.error === 'rms_auth_failed' ? `楽天への接続に失敗しました（HTTP ${res.http_code} ${res.rms_message || ''}）。保存していません。` : '失敗: ' + res.error);
+    if (res.ok) { document.getElementById('cred-secret').value = ''; document.getElementById('cred-license').value = ''; }
+  } catch (e) { box.textContent = '通信エラー: ' + e.message; }
+});
+
+document.getElementById('smtp-update-btn').addEventListener('click', async () => {
+  const box = document.getElementById('cred-result'); box.hidden = false; box.textContent = '更新中...';
+  try {
+    const res = await callApi('update_smtp', { smtp_user: document.getElementById('smtp-user').value.trim(), smtp_pass: document.getElementById('smtp-pass').value });
+    box.textContent = res.ok ? `更新しました（ID ${res.smtp_user_masked}）` : '失敗: ' + res.error;
+    if (res.ok) document.getElementById('smtp-pass').value = '';
+  } catch (e) { box.textContent = '通信エラー: ' + e.message; }
 });

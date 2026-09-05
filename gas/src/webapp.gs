@@ -32,6 +32,8 @@ function doPost(e) {
     const req    = JSON.parse(e.postData.contents);
     const action = req.action;
 
+    if (action === 'onboard_check')  return jsonResponse_(onboardCheck_(req.payload || {}));   // 招待コードで認証（onboarding.gs）
+    if (action === 'onboard_submit') return jsonResponse_(onboardSubmit_(req.payload || {}));
     if (ADMIN_ACTIONS_.includes(action)) {
       return handleAdminAction_(req);
     }
@@ -76,6 +78,16 @@ function handleTenantAction_(req) {
       case 'get_analytics':
         // 読み取り専用。期間は payload.from/to（yyyy-MM-dd）。個人情報は含まない集計値のみ返す。
         return jsonResponse_(getAnalytics_(tenantId, payload));
+
+      case 'get_credentials_status':
+        return jsonResponse_(credentialsStatus_(tenantId));
+
+      case 'update_credentials':
+        // ライセンスキー更新（年次）。RMS 接続テスト成功時のみ暗号化保存
+        return jsonResponse_(updateCredentials_(tenantId, payload));
+
+      case 'update_smtp':
+        return jsonResponse_(updateSmtp_(tenantId, payload));
 
       case 'import_reviews_preview':
         // レビューCSV（RMSレビューチェックツールのダウンロード）を解析して件数と先頭数行を返す。書き込まない

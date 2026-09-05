@@ -17,7 +17,8 @@
 | 8 | フォローメール文面の希望（既定文面を提示して赤入れ） | 店舗 | templates.follow_v1。店舗自身が管理画面から編集可 | 任意 |
 | 9 | レビューCSV（RMS レビューチェックツールからダウンロード） | 店舗が週1回など | レビュー率・評価分布。管理画面「レビュー取込」タブから店舗自身が取り込む | 任意 |
 
-**受け取り方**: 2・4 は秘密情報。メール本文に書かせず、パスワード付きファイルや1回限りの共有リンクで受け取り、api_key シート / config.php に登録後は原本を削除する。
+**受け取り方（2026-09-05〜）**: 秘密情報は**店舗がブラウザから直接入力する**（`webui/onboard.html`）。運営者は招待コードを発行して渡すだけで、キー・パスワードの平文を受け取らない。保存は暗号化（`secrets.gs`、マスターシート `tenant_secrets` タブ）。SMTP 認証は送信のたびにブリッジへ渡すため、config.php の編集も不要。
+店舗向けの手順は `docs/MANUAL_STORE.md`（利用可にする API の一覧を含む）。
 
 **店舗に事前に伝えること**
 - 楽天のガイドラインどおり、レビューを条件にしたクーポンは「投稿者全員に一律」でのみ運用する（評価の高低で差をつけない）
@@ -28,13 +29,13 @@
 
 管理者画面（ADMIN_TOKEN でログイン）で以下を順に実行する。GASエディタを開く必要があるのは太字の項目だけ。
 
-1. 「新規テナント作成」: tenant_id（英小文字）/ 店舗名 / 店舗メール → 専用スプレッドシートと settings/templates が作られ、状態 `setup`・`dry_run=true` で登録される
-2. **api_key シート**（`1iYeV2SbOVoRH8Qjm2d1w5tWmhlE_zcc-yO1tDSLN7Rk`）に行を追加: `id`=tenant_id, `sid`, `sname`, `serviceSecret`, `licenseKey`（値は `BASE64:` 接頭辞＋Base64）, `expiry`
-3. 「操作」→ RMS 接続チェック → `http_code: 200` を確認
-4. **SMTPブリッジ**: 「操作」→ config.php 追記内容を表示 → `X:\projects\step-samurai-bridge\config.php` に追記 → WinSCP でアップロード。店舗メール宛にテスト送信して到達を確認
-5. 「設定」→ `go_live_date` を設定（未来日でよい）。`follow_days_after_ship` を店舗の希望値に
+1. 「作成して招待コードを発行」: tenant_id（英小文字）/ 店舗名 / 店舗メール → 専用スプレッドシートが作られ状態 `setup`・`dry_run=true`。表示された **登録URL（招待コード入り）** を店舗へ渡す（有効7日・一回限り。メール本文に直接書かない）
+2. 店舗が `onboard.html` で RMS キー・SMTP・運用希望を入力 → 楽天接続テスト成功で暗号化保存 → 店舗にトークンが発行され、運営者へ通知メールが届く
+3. 「操作」→ RMS 接続チェック → `http_code: 200` を再確認
+4. （SMTP は店舗登録済みのため config.php 編集不要。店舗に index.html「テスト送信」を依頼して到達を確認）
+5. 「設定」→ `go_live_date` を確定（店舗の希望日を確認して調整）。`follow_days_after_ship` も確認
 6. 「操作」→ 遡及取得を開始（13ヶ月・約30分・自動継続）。完了後「データ確認」で `p2_orders_rows` と `p3` を確認
-7. 「操作」→ 店舗トークンを発行 → 店舗へ渡す。店舗は `webui/index.html`（設定・文面・テスト送信・レビュー取込）と `webui/analytics.html`（店舗分析）にこのトークンでログインする
+7. （トークンは店舗が登録時に取得済み。紛失時のみ「操作」→ 新規発行して渡す）店舗は `webui/index.html`（設定・文面・テスト送信・レビュー取込）と `webui/analytics.html`（店舗分析）にこのトークンでログインする
 8. 店舗が index.html「テスト送信」で文面を確認（宛先は店舗メール固定、dry_run=true の間は送られずログのみ → 確認時は一時的に dry_run=false にして1通送り、戻す）
 9. 稼働: 「設定」→ `dry_run=false`、「操作」→ 状態を `active`。前提（認証情報・go_live_date・follow_days・follow_v1）が揃っていないと active にできない
 

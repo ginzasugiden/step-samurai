@@ -16,3 +16,5 @@ table#probe-table td:last-child { word-break: break-all; }
 #checklist li { margin: 0.4rem 0; } #checklist .done { color: #1e7e34; } #checklist .todo { color: var(--danger); }
 .ok { color: #1e7e34; } .ng { color: var(--danger); }
 select { padding: 0.4rem; border: 1px solid var(--border); border-radius: 4px; }
+main.onboard { max-width: 760px; margin: 0 auto; padding: 1rem; }
+main.onboard label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem; }

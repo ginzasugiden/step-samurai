@@ -20,7 +20,7 @@ const ADMIN_ACTIONS_ = [
   'get_tenant_settings', 'set_tenant_setting',
   'check_credentials', 'probe_tenant', 'ensure_columns',
   'backfill_start', 'backfill_status', 'backfill_reset',
-  'bridge_config_hint', 'system_status',
+  'bridge_config_hint', 'system_status', 'create_invite',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -52,6 +52,7 @@ function handleAdminAction_(req) {
       case 'backfill_reset':      return withTenant_(tenantId, () => { PropertiesService.getScriptProperties().deleteProperty(backfillCursorKey_(tenantId)); return { ok: true }; });
       case 'bridge_config_hint':  return withTenant_(tenantId, () => adminBridgeHint_(tenantId));
       case 'system_status':       return jsonResponse_({ ok: true, status: adminSystemStatus_() });
+      case 'create_invite':       return jsonResponse_(adminCreateInvite_(payload));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });
     }
   } catch (e) {
@@ -83,11 +84,16 @@ function adminListTenants_() {
       backfill_cursor: (pending.find(p => p.tenantId === t.tenant_id) || {}).cursor || null,
       settings: {},
     };
-    try {
-      const api = getApiKeyRow_(t.tenant_id);
-      out.has_credentials = !!(api.get('serviceSecret') && api.get('licenseKey'));
-      out.credentials_expiry = String(api.get('expiry') || '');
-    } catch (e) { /* api_key 行なし */ }
+    const rms = getTenantSecretMeta_(t.tenant_id, 'rms');
+    if (rms) { out.has_credentials = true; out.credentials_expiry = String(rms.meta.expiry || ''); out.credentials_source = 'self'; }
+    else {
+      try {
+        const api = getApiKeyRow_(t.tenant_id);
+        out.has_credentials = !!(api.get('serviceSecret') && api.get('licenseKey'));
+        out.credentials_expiry = String(api.get('expiry') || ''); out.credentials_source = 'legacy';
+      } catch (e) { /* api_key 行なし */ }
+    }
+    out.has_smtp = !!getTenantSecretMeta_(t.tenant_id, 'smtp');
     if (t.status !== 'disabled') {
       try {
         ['go_live_date', 'dry_run', 'follow_days_after_ship'].forEach(k => { out.settings[k] = getTenantSettingValue_(t.tenant_id, k); });
@@ -117,10 +123,13 @@ function adminCreateTenant_(p) {
 /** active にするための前提を列挙する。空配列なら有効化可 */
 function activationBlockers_(tenantId) {
   const blockers = [];
-  try {
-    const api = getApiKeyRow_(tenantId);
-    if (!api.get('serviceSecret') || !api.get('licenseKey')) blockers.push('api_key シートに serviceSecret / licenseKey が未登録');
-  } catch (e) { blockers.push('api_key シートに行がない'); }
+  if (!getTenantSecretMeta_(tenantId, 'rms')) {
+    try {
+      const api = getApiKeyRow_(tenantId);
+      if (!api.get('serviceSecret') || !api.get('licenseKey')) blockers.push('RMS キーが未登録（店舗のセルフ登録 or api_key シート）');
+    } catch (e) { blockers.push('RMS キーが未登録（店舗のセルフ登録 or api_key シート）'); }
+  }
+  if (!getTenantSecretMeta_(tenantId, 'smtp') && tenantId !== LEGACY_GLOBAL_FALLBACK_TENANT_) blockers.push('SMTP 認証が未登録（店舗のセルフ登録）');
   const t = listAllTenants_().find(x => x.tenant_id === tenantId);
   if (!t || !t.shop_email) blockers.push('マスターシートの shop_email が未設定');
   if (!getTenantGoLiveDate_(tenantId)) blockers.push('settings.go_live_date が未設定');
@@ -202,4 +211,22 @@ function adminSystemStatus_() {
     backfill_pending: listBackfillPendingTenants_(),
     tenants_active: listActiveTenants().map(t => t.tenant_id),
   };
+}
+
+// ===== 招待（店舗セルフ登録） =====
+
+/**
+ * tenant_id / shop_name / shop_email を受け取り、未作成ならテナントを setup で作成してから招待コードを発行する。
+ * 招待コードの平文はこの応答にのみ含まれる（シートにはハッシュ）。
+ */
+function adminCreateInvite_(p) {
+  const tenantId = String(p.tenant_id || '').trim();
+  if (!TENANT_ID_PATTERN_.test(tenantId)) return { ok: false, error: 'invalid_tenant_id' };
+  if (!listAllTenants_().some(t => t.tenant_id === tenantId)) {
+    const r = adminCreateTenant_(p);
+    if (!r.ok) return r;
+  }
+  const inv = createInvite_(tenantId);
+  return { ok: true, tenant_id: tenantId, invite: inv.invite, expires_at: inv.expires_at,
+           onboard_url: 'https://step-samurai.ginzasugiden.com/webui/onboard.html' };
 }

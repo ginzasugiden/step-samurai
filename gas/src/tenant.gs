@@ -134,11 +134,19 @@ function getApiKeyRow_(tenantId) {
  *  - 差出人/控えアドレス       : マスター管理シート（shop_email/cc_email）
  */
 function getRmsCredentials(tenantId) {
-  const api    = getApiKeyRow_(tenantId);
   const master = getMasterRow_(tenantId);
 
-  const sid   = api.get('sid');
-  const sname = api.get('sname');
+  // 店舗がセルフ登録した暗号化保管（tenant_secrets）を優先。無ければ旧 api_key シート（tokyoflower 等）
+  let serviceSecret, licenseKey, expiry, sid, sname;
+  const sec = getTenantSecret_(tenantId, 'rms');
+  if (sec) {
+    serviceSecret = sec.secret.service_secret; licenseKey = sec.secret.license_key;
+    expiry = sec.meta.expiry || ''; sid = sec.meta.sid || ''; sname = sec.meta.sname || (master ? master.get('shop_name') : '');
+  } else {
+    const api = getApiKeyRow_(tenantId);
+    serviceSecret = decodeApiValue_(api.get('serviceSecret')); licenseKey = decodeApiValue_(api.get('licenseKey'));
+    expiry = api.get('expiry'); sid = api.get('sid'); sname = api.get('sname');
+  }
 
   // 差出人：マスターシート shop_email（必須）
   const shopEmail = master ? master.get('shop_email') : '';
@@ -149,9 +157,9 @@ function getRmsCredentials(tenantId) {
   const ccEmail = master ? master.get('cc_email') : '';
 
   return {
-    service_secret: decodeApiValue_(api.get('serviceSecret')),
-    license_key:    decodeApiValue_(api.get('licenseKey')),
-    expiry:         api.get('expiry'),
+    service_secret: serviceSecret,
+    license_key:    licenseKey,
+    expiry:         expiry,
     shop_name:      sname,
     sid:            sid,
     from_email:     shopEmail,
@@ -238,7 +246,8 @@ function checkLicenseExpiry() {
   tenants.forEach(t => {
     let expiryStr;
     try {
-      expiryStr = getApiKeyRow_(t.tenant_id).get('expiry');
+      const m = getTenantSecretMeta_(t.tenant_id, 'rms');
+      expiryStr = m ? m.meta.expiry : getApiKeyRow_(t.tenant_id).get('expiry');
     } catch(e) {
       Logger.log(`失効チェックスキップ [${t.tenant_id}]: ${e.message}`);
       return;

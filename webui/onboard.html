@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ステップ侍 店舗登録</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<main class="onboard">
+  <h1>ステップ侍 店舗登録</h1>
+  <p class="hint">運営者から受け取った <b>招待コード</b> と、楽天RMSで発行した情報を入力してください。入力した認証情報は暗号化して保管され、運営者の画面・シート・ログには表示されません（詳細は下部「取扱いについて」）。</p>
+
+  <section class="card" id="step1">
+    <h2>1. 招待コード</h2>
+    <label>API のURL（運営者から案内） <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off"></label>
+    <label>招待コード <input id="invite" type="text" autocomplete="off"></label>
+    <button id="check-btn">確認</button>
+    <p id="check-result" class="hint"></p>
+  </section>
+
+  <section class="card" id="step2" hidden>
+    <h2>2. 店舗情報</h2>
+    <div class="form-grid">
+      <label>店舗名 <input id="shop_name" type="text"></label>
+      <label>店舗ID（sid・数字） <input id="sid" type="text" placeholder="例: 240364（店舗URL https://www.rakuten.co.jp/○○/ のRMS店舗ID）"></label>
+      <label>店舗連絡先メール（RMS登録のもの・差出人になります） <input id="shop_email" type="text"></label>
+      <label>控えメール（任意） <input id="cc_email" type="text"></label>
+    </div>
+
+    <h2>3. 楽天ペイ受注API のキー</h2>
+    <p class="hint">RMS →「店舗設定」→「WEB API」で <b>楽天ペイ受注API</b> を利用申請し、<b>serviceSecret</b> と <b>licenseKey</b> を発行してください。licenseKey には有効期限（通常1年）があります。</p>
+    <div class="form-grid">
+      <label>serviceSecret <input id="service_secret" type="password" autocomplete="off"></label>
+      <label>licenseKey <input id="license_key" type="password" autocomplete="off"></label>
+      <label>licenseKey 有効期限 <input id="license_expiry" type="date"></label>
+    </div>
+
+    <h2>4. あんしんメルアド SMTP</h2>
+    <p class="hint">RMS →「メール」→「あんしんメルアドサービス」→ SMTP設定 で発行した ID とパスワード。店舗名義でお客様のマスクアドレスへ送るために必要です。</p>
+    <div class="form-grid">
+      <label>SMTP ID <input id="smtp_user" type="text" autocomplete="off"></label>
+      <label>SMTP パスワード <input id="smtp_pass" type="password" autocomplete="off"></label>
+    </div>
+
+    <h2>5. 運用の希望</h2>
+    <div class="form-grid">
+      <label>発送後何日でフォローメールを送るか <input id="follow_days" type="number" value="5" min="1" max="30"></label>
+      <label>稼働開始希望日（この日以降の発送分から送信） <input id="go_live_date" type="date"></label>
+    </div>
+
+    <label class="hint"><input id="agree" type="checkbox"> 「取扱いについて」を確認し、登録に同意します</label><br>
+    <button id="submit-btn" disabled>接続テストして登録</button>
+    <pre id="submit-result" class="result-box" hidden></pre>
+  </section>
+
+  <section class="card" id="step3" hidden>
+    <h2>登録完了</h2>
+    <p>以下の <b>アクセストークン</b> を安全な場所に保管してください。<b>この画面を閉じると二度と表示されません。</b>運営者も見ることができないため、紛失した場合は運営者に再発行を依頼してください。</p>
+    <pre id="token-box" class="result-box"></pre>
+    <p>このトークンで <a href="index.html">管理画面</a>（設定・文面・テスト送信・レビュー取込）と <a href="analytics.html">店舗分析</a> にログインできます。実際の送信は運営者が最終確認のうえ開始します。</p>
+  </section>
+
+  <section class="card">
+    <h2>取扱いについて</h2>
+    <ul class="hint">
+      <li>serviceSecret / licenseKey / SMTP パスワードは、サーバ側で暗号化してから保存します。運営者の画面・スプレッドシート・実行ログには平文が表示されません。</li>
+      <li>ただし、サービスが楽天へ受注取得・メール送信を行うため、システム自体は復号して利用します（「誰にも復号できない」方式ではありません）。</li>
+      <li>受注データはこの店舗専用のスプレッドシート1ファイルに保存され、他の店舗からアクセスできる経路はありません。</li>
+      <li>お客様のログイン情報（R-Login・楽天会員ID・パスワード）は一切お預かりしません。</li>
+      <li>licenseKey は期限切れ前に、管理画面「認証情報」から更新できます（30日前に運営者へ通知が届きます）。</li>
+      <li>解約時は、暗号化データ・トークンを削除し、スプレッドシートは店舗へ譲渡または削除します。</li>
+    </ul>
+  </section>
+</main>
+<script src="onboard.js"></script>
+</body>
+</html>

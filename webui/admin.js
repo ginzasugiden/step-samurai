@@ -43,7 +43,8 @@ function renderTenants() {
   state.tenants.forEach(t => {
     const tr = document.createElement('tr');
     const cells = [t.tenant_id, t.shop_name, `<span class="badge ${esc(t.status)}">${esc(t.status)}</span>`,
-      t.has_credentials ? `<span class="ok">あり</span> ${esc(t.credentials_expiry)}` : '<span class="ng">なし</span>',
+      t.has_credentials ? `<span class="ok">${t.credentials_source === 'self' ? '店舗登録' : '運営登録'}</span> ${esc(t.credentials_expiry)}` : '<span class="ng">なし</span>',
+      t.has_smtp ? '<span class="ok">店舗登録</span>' : (t.tenant_id === 'tokyoflower' ? 'config.php' : '<span class="ng">なし</span>'),
       esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-'];
     cells.forEach(c => { const td = document.createElement('td'); td.innerHTML = c; tr.appendChild(td); });
     const td = document.createElement('td'); const b = document.createElement('button'); b.textContent = '開く'; b.className = 'secondary';
@@ -59,6 +60,18 @@ $('create-btn').addEventListener('click', async () => {
   $('create-btn').disabled = true;
   try { const r = await callApi('create_tenant', p); show('create-result', r); if (r.ok) await reloadTenants(); }
   catch (e) { show('create-result', '通信エラー: ' + e.message); } finally { $('create-btn').disabled = false; }
+});
+
+$('invite-btn').addEventListener('click', async () => {
+  const p = { tenant_id: $('new-id').value.trim(), shop_name: $('new-name').value.trim(), shop_email: $('new-email').value.trim(), cc_email: $('new-cc').value.trim() };
+  if (!confirm(`テナント「${p.tenant_id}」を作成（未作成なら）して招待コードを発行します。`)) return;
+  $('invite-btn').disabled = true;
+  try {
+    const r = await callApi('create_invite', p);
+    if (r.ok) show('create-result', `招待コード（一度しか表示されません）:\n${r.invite}\n有効期限: ${r.expires_at}\n\n店舗へ渡すURL（コードを含む）:\n${r.onboard_url}#invite=${r.invite}&api=${encodeURIComponent(state.apiUrl)}\n\n※ URL はフラグメント(#)で渡すためサーバのログには残りません。メール本文に直接書かず、安全な経路で渡してください。`);
+    else show('create-result', r);
+    await reloadTenants();
+  } catch (e) { show('create-result', '通信エラー: ' + e.message); } finally { $('invite-btn').disabled = false; }
 });
 
 // ---- detail ----
@@ -81,9 +94,8 @@ async function selectTenant(id) {
 function renderChecklist(t) {
   const items = [
     ['店舗から情報を受領（docs/ONBOARDING.md の依頼シート）', true, '手動'],
-    ['api_key シートに serviceSecret / licenseKey / sid / sname / expiry を登録（BASE64: 接頭辞）', t.has_credentials, '手動（シート）'],
+    ['招待コードを発行し店舗へ渡す → 店舗が onboard.html で RMSキー・SMTP を登録', t.has_credentials && t.has_smtp, '「作成して招待コードを発行」'],
     ['RMS 接続チェックが 200', null, '「操作」→ RMS 接続チェック'],
-    ['SMTPブリッジ config.php に店舗の SMTP 設定を追記しアップロード', null, '手動（WinSCP）'],
     ['settings.go_live_date を設定', !!t.settings.go_live_date, '「設定」タブ'],
     ['遡及取得（13ヶ月）を開始し完了', t.backfill_cursor ? false : null, '「操作」→ 遡及取得'],
     ['店舗トークンを発行し店舗へ渡す（analytics.html / index.html で確認してもらう）', t.active_tokens > 0, '「操作」→ 店舗トークン'],

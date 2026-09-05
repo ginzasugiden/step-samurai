@@ -22,6 +22,10 @@ function sendViaBridge_(tenantId, to, fromEmail, fromName, subject, body, htmlBo
     reply_to:   replyTo  || fromEmail,
     cc:         ccEmail  || '',
   };
+  // 店舗がセルフ登録した SMTP 認証があれば同梱する（ブリッジ側は payload 優先・無ければ config.php のテナント設定）。
+  // これにより店舗追加ごとの config.php 編集・WinSCP アップロードが不要になる。通信は HTTPS＋共有シークレット。
+  const smtp = getTenantSecret_(tenantId, 'smtp');
+  if (smtp) { payload.smtp_user = smtp.secret.smtp_user; payload.smtp_pass = smtp.secret.smtp_pass; }
 
   const res = UrlFetchApp.fetch(url, {
     method:             'post',

@@ -36,6 +36,7 @@
     <button class="tab-btn" data-tab="test">テスト送信</button>
     <button class="tab-btn" data-tab="history">履歴</button>
     <button class="tab-btn" data-tab="reviews">レビュー取込</button>
+    <button class="tab-btn" data-tab="credentials">認証情報</button>
     <a class="tab-link" href="analytics.html">店舗分析 ↗</a>
   </nav>
 
@@ -80,6 +81,21 @@
       <button id="review-preview-btn">内容を確認</button>
       <button id="review-import-btn" disabled>取り込む</button>
       <pre id="review-result" class="result-box" hidden></pre>
+    </section>
+    <section id="tab-credentials" class="tab-panel">
+      <h2>認証情報（楽天API・SMTP）</h2>
+      <p class="hint">登録済みの内容は暗号化されており、ここにも運営者にも表示されません。licenseKey の期限が近づいたら新しいキーを発行して更新してください（接続テストに成功した場合のみ保存されます）。</p>
+      <pre id="cred-status" class="result-box">読込中...</pre>
+      <h3>楽天ペイ受注API キーの更新</h3>
+      <div class="row"><input id="cred-secret" type="password" placeholder="serviceSecret" autocomplete="off"></div>
+      <div class="row"><input id="cred-license" type="password" placeholder="licenseKey" autocomplete="off"></div>
+      <div class="row"><input id="cred-expiry" type="date"></div>
+      <button id="cred-update-btn">接続テストして更新</button>
+      <h3>あんしんメルアド SMTP の更新</h3>
+      <div class="row"><input id="smtp-user" type="text" placeholder="SMTP ID" autocomplete="off"></div>
+      <div class="row"><input id="smtp-pass" type="password" placeholder="SMTP パスワード" autocomplete="off"></div>
+      <button id="smtp-update-btn">更新</button>
+      <pre id="cred-result" class="result-box" hidden></pre>
     </section>
   </main>
 </div>

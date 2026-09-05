@@ -182,12 +182,15 @@ function buildOrderRow_(header, order, existingRow) {
   return row;
 }
 
-/** RMS の orderDatetime（例 2026-08-27T10:15:30+0900）を JST 'yyyy-MM-dd HH:mm:ss' 文字列にする */
+/**
+ * RMS の orderDatetime（例 2026-08-27T10:15:30+0900）を Date 型で返す。
+ * 文字列で書くとスプレッドシートのタイムゾーン設定で解釈されて時刻がずれるため、
+ * 絶対時刻である Date 型のまま書き込む（読み出し側は Utilities.formatDate で JST に変換する）。
+ */
 function formatOrderDatetime_(raw) {
   if (!raw) return '';
   const d = new Date(String(raw));
-  if (isNaN(d.getTime())) return String(raw);
-  return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  return isNaN(d.getTime()) ? '' : d;
 }
 
 /**

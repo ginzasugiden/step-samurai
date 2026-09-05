@@ -121,7 +121,7 @@ const rmsOrder = (n, prog, extra) => Object.assign({
 t('buildOrderRow_: 17列ヘッダで全列が埋まる', () => {
   const row = ctx.buildOrderRow_(HEADER17, rmsOrder('N1', 500), null);
   const g = c => row[HEADER17.indexOf(c)];
-  assert.equal(g('order_date'), '2026-08-27'); assert.equal(g('order_datetime'), '2026-08-27 10:15:30');
+  assert.equal(g('order_date'), '2026-08-27'); assert.equal(Object.prototype.toString.call(g('order_datetime')), '[object Date]'); assert.equal(Utilities.formatDate(g('order_datetime'),'Asia/Tokyo','yyyy-MM-dd HH:mm:ss'), '2026-08-27 10:15:30');
   assert.equal(g('units'), 3); assert.equal(g('coupon_shop_price'), 300); assert.equal(g('coupon_codes'), 'ABC');
   assert.equal(g('status'), 'shipped'); assert.equal(g('ship_date'), '2026-08-28'); assert.equal(g('review_linked'), 'false');
   assert.equal(g('purchase_count'), 1); assert.equal(row.length, 17);

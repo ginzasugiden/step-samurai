@@ -140,6 +140,7 @@ function probeAnalyticsTokyoflower() {
   const line = (k, v) => out.push(`| ${k} | ${v} |`);
   out.push('| 項目 | 値 |'); out.push('|---|---|');
 
+  line('p0_spreadsheet_timezone', ss.getSpreadsheetTimeZone());
   const ordersSheet = ss.getSheetByName('orders');
   const header = ordersSheet ? ordersSheet.getRange(1, 1, 1, ordersSheet.getLastColumn()).getValues()[0].map(String) : [];
   line('p1_orders_header', header.join(', '));
@@ -176,4 +177,16 @@ function probeAnalyticsTokyoflower() {
   line('p8_warnings', (res.warnings || []).join(' / ') || '-');
 
   Logger.log('\n' + out.join('\n'));
+}
+
+/**
+ * テナントシートのタイムゾーンを Asia/Tokyo に揃える（表示上の整合のため。集計は Date 型で行うので必須ではない）。
+ * 既存の order_date / ship_date は 'yyyy-MM-dd' の日付のみで、TZ 変更で日付が変わることはない。
+ */
+function fixSpreadsheetTimezoneTokyoflower() {
+  const ss = getTenantSpreadsheet('tokyoflower');
+  const before = ss.getSpreadsheetTimeZone();
+  if (before === 'Asia/Tokyo') { Logger.log('既に Asia/Tokyo です'); return; }
+  ss.setSpreadsheetTimeZone('Asia/Tokyo');
+  Logger.log(`タイムゾーンを ${before} → ${ss.getSpreadsheetTimeZone()} に変更しました`);
 }

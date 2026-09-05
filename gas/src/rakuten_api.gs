@@ -18,10 +18,11 @@ function getRmsAuthHeader_(tenantId) {
 // 注文日ベースの検索窓だけでは発送後に再取得されず ship_date が空のまま残る。
 // そのため「直近7日に出荷完了報告された注文」(dateType:5) も併せて取得しマージする。
 function fetchOrders(tenantId) {
+  // 分析用列（order_datetime 等）が無ければ末尾に追加（冪等・軽量）。失敗しても受注取得は続行する。
+  try { ensureAnalyticsColumns_(tenantId); } catch (e) { Logger.log(`fetchOrders: ensureAnalyticsColumns_ skip: ${e.message}`); }
+
   const ss     = getTenantSpreadsheet(tenantId);
   const sheet  = ss.getSheetByName('orders');
-  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const idx    = col => header.indexOf(col);
 
   const dateFrom = new Date(); dateFrom.setDate(dateFrom.getDate() - 7);
   const dateTo   = new Date();
@@ -30,9 +31,34 @@ function fetchOrders(tenantId) {
   const byShipDate  = searchOrderNumbers_(tenantId, 5, dateFrom, dateTo); // 5=出荷完了報告日
   const orderNumbers = [...new Set([...byOrderDate, ...byShipDate])];
 
-  if (orderNumbers.length === 0) { Logger.log('fetchOrders: 新規受注なし'); return; }
+  if (orderNumbers.length > 0) {
+    const orders = getOrdersByNumbers_(tenantId, orderNumbers);
+    upsertOrdersBatch_(sheet, orders);
+    Logger.log(`fetchOrders [${tenantId}]: ${orders.length}件取得（注文日軸${byOrderDate.length}件/出荷報告軸${byShipDate.length}件）`);
+  } else {
+    Logger.log('fetchOrders: 新規受注なし');
+  }
 
-  // getOrder は1リクエスト最大100件のためチャンク分割して取得
+  // 7日窓を過ぎてからキャンセルされた注文を検知して status='cancelled' に更新する。
+  // searchOrder の通常検索は 100〜700 のみで 800/900 を含まないため、別途同期しないと
+  // 「キャンセル済みなのに shipped のまま」の行が残り続ける（分析の母集団が狂う）。
+  // 失敗しても受注取得・メール送信には影響させない。
+  try {
+    const n = syncCancelledOrders_(tenantId, sheet, 60);
+    if (n > 0) Logger.log(`fetchOrders [${tenantId}]: キャンセル同期 ${n}件`);
+  } catch (e) {
+    Logger.log(`fetchOrders: syncCancelledOrders_ skip: ${e.message}`);
+  }
+
+  // purchase_count は upsert 後に全行再計算（キャンセル同期の結果も反映される）
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  recomputePurchaseCounts_(sheet, col => header.indexOf(col));
+}
+
+/**
+ * getOrder を100件チャンクで呼び出し OrderModel の配列を返す（エラーチャンクはスキップ）。
+ */
+function getOrdersByNumbers_(tenantId, orderNumbers) {
   const orders = [];
   chunk_(orderNumbers, 100).forEach(chunkNums => {
     const detailRes = UrlFetchApp.fetch(`${RMS_BASE}/order/getOrder/`, {
@@ -43,39 +69,66 @@ function fetchOrders(tenantId) {
       muteHttpExceptions: true,
     });
     if (detailRes.getResponseCode() !== 200) {
-      Logger.log(`fetchOrders getOrder error (${chunkNums.length}件): ${detailRes.getContentText()}`);
+      Logger.log(`getOrdersByNumbers_ error (${chunkNums.length}件): ${detailRes.getContentText()}`);
       return;
     }
     const detail = JSON.parse(detailRes.getContentText());
     (detail.OrderModelList || []).forEach(o => orders.push(o));
   });
+  return orders;
+}
 
-  orders.forEach(order => upsertOrder_(sheet, idx, order));
-  recomputePurchaseCounts_(sheet, idx);
-  Logger.log(`fetchOrders [${tenantId}]: ${orders.length}件取得（注文日軸${byOrderDate.length}件/出荷報告軸${byShipDate.length}件）`);
+/**
+ * 直近 days 日に受注された注文のうちキャンセル(800/900)のものを RMS から取得し、
+ * orders タブ上で status が cancelled 以外の行を 'cancelled' に更新する。戻り値は更新件数。
+ */
+function syncCancelledOrders_(tenantId, sheet, days) {
+  const dateFrom = new Date(); dateFrom.setDate(dateFrom.getDate() - (days || 60));
+  const dateTo   = new Date();
+  const cancelled = new Set(searchOrderNumbers_(tenantId, 1, dateFrom, dateTo, [800, 900]));
+  if (cancelled.size === 0) return 0;
+
+  const data      = sheet.getDataRange().getValues();
+  const header    = data[0];
+  const numIdx    = header.indexOf('order_number');
+  const statusIdx = header.indexOf('status');
+  let updated = 0;
+  for (let i = 1; i < data.length; i++) {
+    if (cancelled.has(String(data[i][numIdx])) && data[i][statusIdx] !== 'cancelled') {
+      sheet.getRange(i + 1, statusIdx + 1).setValue('cancelled');
+      updated++;
+    }
+  }
+  return updated;
 }
 
 // searchOrder を指定 dateType で実行し orderNumberList を返す（エラー時は空配列 = fail-closed）
-function searchOrderNumbers_(tenantId, dateType, dateFrom, dateTo) {
-  const searchBody = {
-    dateType:          dateType,
-    startDatetime:     formatRmsDate_(dateFrom),
-    endDatetime:       formatRmsDate_(dateTo),
-    orderProgressList: [100, 200, 300, 400, 500, 600, 700],
-    PaginationRequestModel: { requestRecordsAmount: 1000, requestPage: 1 },
-  };
-  const res = UrlFetchApp.fetch(`${RMS_BASE}/order/searchOrder/`, {
-    method:      'post',
-    contentType: 'application/json; charset=UTF-8',
-    headers:     getRmsAuthHeader_(tenantId),
-    payload:     JSON.stringify(searchBody),
-    muteHttpExceptions: true,
-  });
-  if (res.getResponseCode() !== 200) {
-    Logger.log(`searchOrderNumbers_ error (dateType=${dateType}): ${res.getContentText()}`);
-    return [];
+function searchOrderNumbers_(tenantId, dateType, dateFrom, dateTo, progressList) {
+  const all = [];
+  for (let page = 1; page <= 20; page++) { // 20ページ×1000件を上限とする安全弁
+    const searchBody = {
+      dateType:          dateType,
+      startDatetime:     formatRmsDate_(dateFrom),
+      endDatetime:       formatRmsDate_(dateTo),
+      orderProgressList: progressList || [100, 200, 300, 400, 500, 600, 700],
+      PaginationRequestModel: { requestRecordsAmount: 1000, requestPage: page },
+    };
+    const res = UrlFetchApp.fetch(`${RMS_BASE}/order/searchOrder/`, {
+      method:      'post',
+      contentType: 'application/json; charset=UTF-8',
+      headers:     getRmsAuthHeader_(tenantId),
+      payload:     JSON.stringify(searchBody),
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) {
+      Logger.log(`searchOrderNumbers_ error (dateType=${dateType}, page=${page}): ${res.getContentText()}`);
+      return all; // 途中まで取れた分は返す（fail-closed寄り）
+    }
+    const list = JSON.parse(res.getContentText()).orderNumberList || [];
+    all.push(...list);
+    if (list.length < 1000) break;
   }
-  return JSON.parse(res.getContentText()).orderNumberList || [];
+  return all;
 }
 
 function chunk_(arr, size) {
@@ -84,42 +137,96 @@ function chunk_(arr, size) {
   return out;
 }
 
-function upsertOrder_(sheet, idx, order) {
-  const data = sheet.getDataRange().getValues();
-  const existingRow = data.findIndex((row, i) =>
-    i > 0 && row[idx('order_number')] === order.orderNumber
-  );
+/**
+ * 注文1件分の行データをヘッダ基準で組み立てる。
+ * - ヘッダに存在する列だけを埋める（列追加・列順変更に追従。固定長配列は使わない）
+ * - existingRow が渡された場合、ここで扱わない列（review_linked や将来の手入力列）は既存値を保持する
+ * 旧実装は Array(13).fill('') で行を作っていたため、列を追加すると upsert のたびに空で上書きされていた。
+ */
+function buildOrderRow_(header, order, existingRow) {
+  const row = existingRow ? existingRow.slice() : [];
+  while (row.length < header.length) row.push('');
+  const set = (col, v) => { const i = header.indexOf(col); if (i >= 0) row[i] = v; };
 
   const orderer     = order.OrdererModel || {};
   const buyerKey    = orderer.emailAddress || order.orderNumber;
   const maskedEmail = orderer.emailAddress || '';
-  const pkg         = order.PackageModelList?.[0] || {};
-  const item        = pkg.ItemModelList?.[0] || {};
+  const pkgs        = order.PackageModelList || [];
+  const pkg         = pkgs[0] || {};
+  const item        = (pkg.ItemModelList || [])[0] || {};
   const shipDate    = pkg.ShippingModelList?.[0]?.shippingDate || pkg.shippingDate || '';
   const status      = mapOrderStatus_(order.orderProgress);
 
-  const rowData = Array(13).fill('');
-  rowData[idx('order_number')]   = order.orderNumber;
-  rowData[idx('order_date')]     = (order.orderDatetime || '').substring(0, 10);
-  rowData[idx('buyer_key')]      = buyerKey;
-  rowData[idx('masked_email')]   = maskedEmail;
-  rowData[idx('buyer_name')]     = `${orderer.familyName || ''}${orderer.firstName || ''}`;
-  rowData[idx('item_code')]      = item.itemNumber || '';
-  rowData[idx('item_name')]      = item.itemName || '';
-  rowData[idx('amount')]         = order.totalPrice || 0;
-  rowData[idx('purchase_count')] = 1; // 仮値。fetchOrders末尾のrecomputePurchaseCounts_で全行再計算される
-  rowData[idx('prefecture')]     = orderer.prefecture || pkg.SenderModel?.prefecture || '';
-  rowData[idx('ship_date')]      = shipDate;
-  rowData[idx('status')]         = status;
-  rowData[idx('review_linked')]  = existingRow > 0
-    ? sheet.getRange(existingRow + 1, idx('review_linked') + 1).getValue()
-    : 'false';
+  let units = 0;
+  pkgs.forEach(p => (p.ItemModelList || []).forEach(it => { units += Number(it.units) || 0; }));
 
-  if (existingRow > 0) {
-    sheet.getRange(existingRow + 1, 1, 1, rowData.length).setValues([rowData]);
-  } else {
-    sheet.appendRow(rowData);
+  set('order_number',   order.orderNumber);
+  set('order_date',     (order.orderDatetime || '').substring(0, 10));
+  set('order_datetime', formatOrderDatetime_(order.orderDatetime));
+  set('buyer_key',      buyerKey);
+  set('masked_email',   maskedEmail);
+  set('buyer_name',     `${orderer.familyName || ''}${orderer.firstName || ''}`);
+  set('item_code',      item.itemNumber || '');
+  set('item_name',      item.itemName || '');
+  set('amount',         order.totalPrice || 0);
+  set('units',          units);
+  set('coupon_shop_price', Number(order.couponShopPrice) || 0);
+  set('coupon_codes',   (order.CouponModelList || []).map(c => c.couponCode).filter(Boolean).join(','));
+  set('prefecture',     orderer.prefecture || pkg.SenderModel?.prefecture || '');
+  set('ship_date',      shipDate);
+  set('status',         status);
+  if (!existingRow) {
+    set('purchase_count', 1); // 仮値。fetchOrders末尾の recomputePurchaseCounts_ で全行再計算される
+    set('review_linked',  'false');
   }
+  return row;
+}
+
+/** RMS の orderDatetime（例 2026-08-27T10:15:30+0900）を JST 'yyyy-MM-dd HH:mm:ss' 文字列にする */
+function formatOrderDatetime_(raw) {
+  if (!raw) return '';
+  const d = new Date(String(raw));
+  if (isNaN(d.getTime())) return String(raw);
+  return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+}
+
+/**
+ * 複数注文を一括 upsert する（シート読み込み1回・書き込みは既存行の更新＋新規行のまとめ追加）。
+ * 旧 upsertOrder_ は1件ごとに全体を読み直していたため、遡及取得（月1000件）では6分制限に抵触する。
+ */
+function upsertOrdersBatch_(sheet, orders) {
+  if (!orders || orders.length === 0) return { updated: 0, inserted: 0 };
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0].map(h => String(h || ''));
+  const numIdx = header.indexOf('order_number');
+  const rowByNum = {};
+  for (let i = 1; i < data.length; i++) {
+    const n = data[i][numIdx];
+    if (n) rowByNum[String(n)] = i;
+  }
+
+  const newRows = [];
+  let updated = 0;
+  orders.forEach(order => {
+    const i = rowByNum[String(order.orderNumber)];
+    if (i !== undefined) {
+      const existing = data[i].slice(); while (existing.length < header.length) existing.push('');
+      const row = buildOrderRow_(header, order, existing);
+      sheet.getRange(i + 1, 1, 1, header.length).setValues([row]);
+      updated++;
+    } else {
+      newRows.push(buildOrderRow_(header, order, null));
+    }
+  });
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, header.length).setValues(newRows);
+  }
+  return { updated: updated, inserted: newRows.length };
+}
+
+/** 互換用：1件だけ upsert（新規コードは upsertOrdersBatch_ を使うこと） */
+function upsertOrder_(sheet, idx, order) {
+  upsertOrdersBatch_(sheet, [order]);
 }
 
 function mapOrderStatus_(progress) {

@@ -1,0 +1,75 @@
+/* step-samurai 店舗分析 — style.css の上に読み込む追加スタイル */
+
+.link-btn {
+  display: inline-block;
+  margin-right: 0.5rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.period-bar {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.period-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+.preset-btn {
+  background: var(--bg-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.8rem;
+}
+.preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.period-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.period-custom input[type="date"] { width: auto; padding: 0.3rem 0.5rem; }
+
+.warnings {
+  background: #fff8e1;
+  border: 1px solid #f1c40f;
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.kpi-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+.kpi-label { font-size: 0.8rem; color: var(--text-muted); }
+.kpi-value { font-size: 1.5rem; font-weight: 600; margin: 0.15rem 0; }
+.kpi-sub   { font-size: 0.78rem; color: var(--text-muted); }
+
+.chart-grid, .table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.chart-card, .table-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem 1rem;
+  min-height: 300px;
+  position: relative;
+}
+.chart-card canvas { max-height: 240px; }
+.chart-card.wide, .table-card.wide { grid-column: 1 / -1; }
+.chart-card.wide canvas { max-height: 280px; }
+
+.table-card { min-height: auto; }
+.table-card table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.table-card th, .table-card td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.table-card td:not(:first-child), .table-card th:not(:first-child) { text-align: right; }

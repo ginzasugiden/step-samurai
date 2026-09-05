@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>step-samurai 店舗分析</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="analytics.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="login-box">
+    <h1>step-samurai 店舗分析</h1>
+    <p class="hint">管理画面と同じ API のURL・トークンでログインします。このページを閉じると再ログインが必要です（ブラウザには保存されません）。</p>
+
+    <label for="api-url">API のURL</label>
+    <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
+
+    <label for="api-token">アクセストークン</label>
+    <input id="api-token" type="password" placeholder="発行されたトークンを入力" autocomplete="off">
+
+    <button id="login-btn">ログイン</button>
+    <p id="login-error" class="error" hidden></p>
+    <p class="hint"><a href="index.html">管理画面へ</a></p>
+  </div>
+</div>
+
+<div id="app-screen" class="screen" hidden>
+  <header class="app-header">
+    <h1>step-samurai 店舗分析</h1>
+    <div>
+      <a href="index.html" class="link-btn">管理画面</a>
+      <button id="logout-btn" class="secondary">ログアウト</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="period-bar">
+      <div class="period-presets">
+        <button class="preset-btn" data-preset="this_month">今月</button>
+        <button class="preset-btn" data-preset="last_month">先月</button>
+        <button class="preset-btn" data-preset="last_30">直近30日</button>
+        <button class="preset-btn active" data-preset="this_year">今年</button>
+        <button class="preset-btn" data-preset="last_13m">過去13ヶ月</button>
+      </div>
+      <div class="period-custom">
+        <input id="date-from" type="date"> 〜 <input id="date-to" type="date">
+        <button id="apply-btn">表示</button>
+        <button id="csv-btn" class="secondary">CSV</button>
+      </div>
+      <p id="status-line" class="hint"></p>
+    </section>
+
+    <div id="warnings" class="warnings" hidden></div>
+
+    <section class="kpi-grid" id="kpi-grid"></section>
+
+    <section class="chart-grid">
+      <div class="chart-card wide"><h2>日別 受注件数・売上</h2><canvas id="c-daily"></canvas></div>
+      <div class="chart-card"><h2>時間帯別 受注件数</h2><canvas id="c-hourly"></canvas></div>
+      <div class="chart-card"><h2>曜日別 受注件数</h2><canvas id="c-weekday"></canvas></div>
+      <div class="chart-card"><h2>新規／リピート／不明</h2><canvas id="c-customer"></canvas></div>
+      <div class="chart-card"><h2>レビュー評価分布</h2><canvas id="c-stars"></canvas></div>
+      <div class="chart-card"><h2>レビュー投稿までの日数（発送日起点）</h2><canvas id="c-lead"></canvas></div>
+      <div class="chart-card" id="card-hourly-reviews"><h2>時間帯別 レビュー投稿</h2><canvas id="c-hourly-reviews"></canvas><p class="hint" id="hourly-reviews-note" hidden></p></div>
+      <div class="chart-card wide"><h2>月別推移</h2><canvas id="c-monthly"></canvas></div>
+    </section>
+
+    <section class="table-grid">
+      <div class="table-card"><h2>商品別 上位10</h2><div class="table-wrap"><table id="t-items"><thead><tr><th>商品</th><th>件数</th><th>売上</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="table-card"><h2>都道府県別 上位10</h2><div class="table-wrap"><table id="t-prefs"><thead><tr><th>都道府県</th><th>件数</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="table-card wide"><h2>月別 一覧</h2><div class="table-wrap"><table id="t-monthly"><thead><tr><th>月</th><th>受注</th><th>売上</th><th>新規</th><th>リピート</th><th>不明</th><th>レビュー</th><th>フォロー送信</th></tr></thead><tbody></tbody></table></div></div>
+    </section>
+
+    <p class="hint">
+      集計は受注日基準・キャンセル注文除外。売上は顧客請求総額（送料・ラッピング込み）。
+      RMS の集計とは母集団の定義が異なるため完全一致はしません。
+    </p>
+  </main>
+</div>
+
+<script src="analytics.js"></script>
+</body>
+</html>

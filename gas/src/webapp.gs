@@ -102,6 +102,10 @@ function handleTenantAction_(req) {
       case 'get_history':
         return jsonResponse_({ ok: true, history: getTenantHistory_(tenantId) });
 
+      case 'get_analytics':
+        // 読み取り専用。期間は payload.from/to（yyyy-MM-dd）。個人情報は含まない集計値のみ返す。
+        return jsonResponse_(getAnalytics_(tenantId, payload));
+
       default:
         return jsonResponse_({ ok: false, error: 'unknown_action' });
     }

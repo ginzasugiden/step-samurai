@@ -98,7 +98,7 @@ function adminListTenants_() {
     out.has_smtp = !!getTenantSecretMeta_(t.tenant_id, 'smtp');
     if (t.status !== 'disabled') {
       try {
-        ['go_live_date', 'dry_run', 'follow_days_after_ship'].forEach(k => { out.settings[k] = getTenantSettingValue_(t.tenant_id, k); });
+        ['go_live_date', 'dry_run', 'follow_days_after_ship'].forEach(k => { const v = getTenantSettingValue_(t.tenant_id, k); out.settings[k] = (k === 'go_live_date' && v) ? toJstDateString_(v) : v; });
       } catch (e) { out.settings_error = 'sheet_unreadable'; }
     }
     return out;

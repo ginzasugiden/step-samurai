@@ -32,8 +32,8 @@
     <h2>3. 楽天ペイ受注API のキー</h2>
     <p class="hint">RMS →「店舗設定」→「WEB API」で <b>楽天ペイ受注API</b> を利用申請し、<b>serviceSecret</b> と <b>licenseKey</b> を発行してください。licenseKey には有効期限（通常1年）があります。</p>
     <div class="form-grid">
-      <label>serviceSecret <input id="service_secret" type="password" autocomplete="off"></label>
-      <label>licenseKey <input id="license_key" type="password" autocomplete="off"></label>
+      <label>serviceSecret <input id="service_secret" type="password" autocomplete="new-password"></label>
+      <label>licenseKey <input id="license_key" type="password" autocomplete="new-password"></label>
       <label>licenseKey 有効期限 <input id="license_expiry" type="date"></label>
     </div>
 
@@ -41,7 +41,7 @@
     <p class="hint">RMS →「メール」→「あんしんメルアドサービス」→ SMTP設定 で発行した ID とパスワード。店舗名義でお客様のマスクアドレスへ送るために必要です。</p>
     <div class="form-grid">
       <label>SMTP ID <input id="smtp_user" type="text" autocomplete="off"></label>
-      <label>SMTP パスワード <input id="smtp_pass" type="password" autocomplete="off"></label>
+      <label>SMTP パスワード <input id="smtp_pass" type="password" autocomplete="new-password"></label>
     </div>
 
     <h2>5. 運用の希望</h2>

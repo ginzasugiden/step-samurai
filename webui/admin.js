@@ -1,3 +1,21 @@
+// ===== 全画面オーバーレイ（処理中表示）=====
+function showOverlay(msg) {
+  let el = document.getElementById('ss-overlay');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'ss-overlay';
+    const sp = document.createElement('div'); sp.className = 'big-spinner';
+    const tx = document.createElement('div'); tx.className = 'overlay-text';
+    el.append(sp, tx); document.body.appendChild(el);
+  }
+  el.querySelector('.overlay-text').textContent = msg || '処理中...';
+  el.hidden = false;
+}
+function hideOverlay() { const el = document.getElementById('ss-overlay'); if (el) el.hidden = true; }
+// ブラウザのパスワード自動入力を無効化（同一ドメインに保存された別画面の値が入る事故を防ぐ）
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input[type="password"]').forEach(i => { i.setAttribute('autocomplete', 'new-password'); i.setAttribute('data-lpignore', 'true'); i.value = ''; });
+});
+
 // step-samurai 運営管理画面 — ADMIN_TOKEN 専用。URL・トークンはメモリ上のみ。
 const state = { apiUrl: '', token: '', tenants: [], current: null };
 
@@ -10,6 +28,15 @@ async function callApi(action, payload) {
 const $ = id => document.getElementById(id);
 const show = (id, obj) => { const el = $(id); el.hidden = false; el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); };
 const esc = s => String(s ?? '');
+// トークンをコピーボタン付きで表示（一度しか表示されないため、消えない・選択できる形にする）
+function showToken(resultId, token) {
+  const el = $(resultId); el.hidden = false; el.textContent = '';
+  const p = document.createElement('div'); p.textContent = '店舗トークン（この表示は再読込まで残ります。必ず控えてください）';
+  const code = document.createElement('code'); code.textContent = token; code.style.display = 'block'; code.style.margin = '0.4rem 0'; code.style.wordBreak = 'break-all'; code.style.userSelect = 'all';
+  const btn = document.createElement('button'); btn.textContent = 'コピー'; btn.className = 'secondary';
+  btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(token); btn.textContent = 'コピーしました'; } catch (e) { btn.textContent = '手動で選択してコピーしてください'; } });
+  el.append(p, code, btn);
+}
 
 // ボタンの処理中表示（多重クリック防止＋スピナー）
 function busy(btn, on, label) {
@@ -24,14 +51,14 @@ function busy(btn, on, label) {
 $('login-btn').addEventListener('click', async () => {
   state.apiUrl = $('api-url').value.trim(); state.token = $('api-token').value.trim();
   $('login-error').hidden = true;
-  busy($('login-btn'), true, '確認中...');
+  busy($('login-btn'), true, '確認中...'); showOverlay('ログインしています...');
   try {
     const r = await callApi('list_tenants');
     if (!r.ok) { $('login-error').textContent = 'ログイン失敗: ' + r.error; $('login-error').hidden = false; state.token = ''; return; }
     state.tenants = r.tenants; renderTenants(); loadSystem();
     $('login-screen').hidden = true; $('app-screen').hidden = false;
   } catch (e) { $('login-error').textContent = '通信エラー: ' + e.message; $('login-error').hidden = false; }
-  finally { busy($('login-btn'), false, 'ログイン'); }
+  finally { busy($('login-btn'), false, 'ログイン'); hideOverlay(); }
 });
 $('logout-btn').addEventListener('click', () => { state.apiUrl = state.token = ''; state.tenants = []; $('api-token').value = ''; $('app-screen').hidden = true; $('login-screen').hidden = false; });
 $('reload-btn').addEventListener('click', reloadTenants);
@@ -93,10 +120,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click
 
 async function selectTenant(id) {
   const t = state.tenants.find(x => x.tenant_id === id); if (!t) return;
+  const switched = !state.current || state.current.tenant_id !== id;
   state.current = t; $('detail-id').textContent = `${t.tenant_id}（${t.shop_name}）`; $('detail-card').hidden = false;
   $('status-select').value = t.status;
-  ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result'].forEach(i => { $(i).hidden = true; });
-  document.querySelector('#probe-table tbody').innerHTML = '';
+  if (switched) {
+    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result'].forEach(i => { $(i).hidden = true; });
+    document.querySelector('#probe-table tbody').innerHTML = '';
+  }
   renderChecklist(t);
   try { const r = await callApi('get_tenant_settings', { tenant_id: id }); if (r.ok) renderSettings(r.settings); } catch (e) {}
   $('detail-card').scrollIntoView({ behavior: 'smooth' });
@@ -145,7 +175,12 @@ const tid = () => ({ tenant_id: state.current.tenant_id });
 const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventListener('click', async () => {
   if (confirmMsg && !confirm(confirmMsg)) return;
   busy($(btnId), true);
-  try { const r = await callApi(action, Object.assign(tid(), extra ? extra() : {})); show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r); if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset'].includes(action)) await reloadTenants(); }
+  try {
+    const r = await callApi(action, Object.assign(tid(), extra ? extra() : {}));
+    if (action === 'issue_tenant_token' && r.ok) showToken(resultId, r.token);
+    else show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r);
+    if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp'].includes(action)) await reloadTenants();
+  }
   catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
 });
 op('cred-btn', 'check_credentials', 'cred-result');

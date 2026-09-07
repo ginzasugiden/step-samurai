@@ -1,3 +1,21 @@
+// ===== 全画面オーバーレイ（処理中表示）=====
+function showOverlay(msg) {
+  let el = document.getElementById('ss-overlay');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'ss-overlay';
+    const sp = document.createElement('div'); sp.className = 'big-spinner';
+    const tx = document.createElement('div'); tx.className = 'overlay-text';
+    el.append(sp, tx); document.body.appendChild(el);
+  }
+  el.querySelector('.overlay-text').textContent = msg || '処理中...';
+  el.hidden = false;
+}
+function hideOverlay() { const el = document.getElementById('ss-overlay'); if (el) el.hidden = true; }
+// ブラウザのパスワード自動入力を無効化（同一ドメインに保存された別画面の値が入る事故を防ぐ）
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input[type="password"]').forEach(i => { i.setAttribute('autocomplete', 'new-password'); i.setAttribute('data-lpignore', 'true'); i.value = ''; });
+});
+
 // step-samurai 管理画面 — バニラJS（ビルド工程なし）
 // APIのURL・トークンはこのモジュールスコープの変数にのみ保持する。
 // localStorage/sessionStorage/cookie等への保存は行わない（ページを閉じると消える）。
@@ -31,7 +49,7 @@ const appScreen   = document.getElementById('app-screen');
 const loginError  = document.getElementById('login-error');
 
 document.getElementById('login-btn').addEventListener('click', async () => {
-  const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy');
+  const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy'); showOverlay('ログインしています...');
   try {
   const apiUrl = document.getElementById('api-url').value.trim();
   const token  = document.getElementById('api-token').value.trim();
@@ -60,7 +78,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';
   }
-  } finally { lb.disabled = false; lb.classList.remove('is-busy'); }
+  } finally { lb.disabled = false; lb.classList.remove('is-busy'); hideOverlay(); }
 });
 
 function showLoginError(msg) {

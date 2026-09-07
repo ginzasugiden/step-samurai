@@ -117,7 +117,7 @@ function getTenantSettingsRaw_(tenantId) {
     .filter(r => r[idx('key')])
     .map(r => ({
       key:                String(r[idx('key')]),
-      value:              String(r[idx('value')]),
+      value:              r[idx('value')] instanceof Date ? Utilities.formatDate(r[idx('value')], 'Asia/Tokyo', 'yyyy-MM-dd') : String(r[idx('value')] ?? ''),
       description:        String(r[idx('description')] || ''),
       editable_by_tenant: String(r[idx('editable_by_tenant')]).toUpperCase() === 'TRUE',
     }));

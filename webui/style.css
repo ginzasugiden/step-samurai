@@ -210,6 +210,7 @@ table th { color: var(--text-muted); font-weight: 600; }
 
 
 /* 処理中表示 */
+.spinner[hidden] { display: none !important; }
 .spinner {
   display: inline-block;
   width: 0.9em; height: 0.9em;
@@ -234,3 +235,17 @@ button.secondary.is-busy::after { border-color: rgba(0,0,0,0.2); border-top-colo
 details.sub { margin-top: 0.6rem; font-size: 0.9rem; }
 details.sub summary { cursor: pointer; color: var(--accent); }
 details.sub input { display: block; width: 100%; margin: 0.3rem 0; }
+
+
+/* 全画面オーバーレイ（ログイン・長い処理） */
+#ss-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(20, 24, 33, 0.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-size: 1rem;
+}
+#ss-overlay .big-spinner {
+  width: 56px; height: 56px; margin-bottom: 1rem;
+  border: 5px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}

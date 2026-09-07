@@ -1,3 +1,21 @@
+// ===== 全画面オーバーレイ（処理中表示）=====
+function showOverlay(msg) {
+  let el = document.getElementById('ss-overlay');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'ss-overlay';
+    const sp = document.createElement('div'); sp.className = 'big-spinner';
+    const tx = document.createElement('div'); tx.className = 'overlay-text';
+    el.append(sp, tx); document.body.appendChild(el);
+  }
+  el.querySelector('.overlay-text').textContent = msg || '処理中...';
+  el.hidden = false;
+}
+function hideOverlay() { const el = document.getElementById('ss-overlay'); if (el) el.hidden = true; }
+// ブラウザのパスワード自動入力を無効化（同一ドメインに保存された別画面の値が入る事故を防ぐ）
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input[type="password"]').forEach(i => { i.setAttribute('autocomplete', 'new-password'); i.setAttribute('data-lpignore', 'true'); i.value = ''; });
+});
+
 // 店舗セルフ登録ページ。招待コード・入力値はメモリ上のみ。送信は HTTPS の GAS WebApp へ。
 const $ = id => document.getElementById(id);
 const state = { apiUrl: '', invite: '' };
@@ -31,7 +49,7 @@ $('agree').addEventListener('change', () => { $('submit-btn').disabled = !$('agr
 
 $('check-btn').addEventListener('click', () => { $('check-btn').classList.add('is-busy'); $('check-btn').disabled = true; setTimeout(() => { $('check-btn').classList.remove('is-busy'); $('check-btn').disabled = false; }, 1500); });
 $('submit-btn').addEventListener('click', async () => {
-  $('submit-btn').classList.add('is-busy');
+  $('submit-btn').classList.add('is-busy'); showOverlay('楽天に接続テストして登録しています...');
   const keys = ['shop_name', 'sid', 'shop_email', 'cc_email', 'service_secret', 'license_key', 'license_expiry', 'smtp_user', 'smtp_pass', 'follow_days', 'go_live_date'];
   const p = { invite: state.invite }; keys.forEach(k => { p[k] = $(k).value.trim(); });
   $('submit-btn').disabled = true; $('submit-result').hidden = false; $('submit-result').textContent = '楽天に接続テスト中...';
@@ -44,5 +62,5 @@ $('submit-btn').addEventListener('click', async () => {
     keys.forEach(k => { $(k).value = ''; });
     $('step2').hidden = true; $('step3').hidden = false; $('token-box').textContent = r.token;
   } catch (e) { $('submit-result').textContent = '通信エラー: ' + e.message; $('submit-btn').disabled = false; }
-  finally { $('submit-btn').classList.remove('is-busy'); }
+  finally { $('submit-btn').classList.remove('is-busy'); hideOverlay(); }
 });

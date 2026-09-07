@@ -17,7 +17,7 @@
     <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
     <label for="api-token">管理者トークン</label>
     <input id="api-token" type="password" autocomplete="off">
-    <button id="login-btn">ログイン</button>
+    <button id="login-btn"><span class="spinner" hidden></span><span class="label">ログイン</span></button>
     <p id="login-error" class="error" hidden></p>
   </div>
 </div>
@@ -80,7 +80,20 @@
 
       <div id="tab-ops" class="tab-panel">
         <div class="ops-grid">
-          <div><h3>認証情報</h3><button id="cred-btn">RMS 接続チェック</button><pre id="cred-result" class="result-box" hidden></pre></div>
+          <div><h3>認証情報</h3><button id="cred-btn">RMS 接続チェック</button>
+            <details class="sub"><summary>RMSキーを運営者が登録／更新する（店舗から預かった場合）</summary>
+              <input id="set-secret" type="password" placeholder="serviceSecret" autocomplete="off">
+              <input id="set-license" type="password" placeholder="licenseKey" autocomplete="off">
+              <input id="set-expiry" type="date">
+              <button id="set-cred-btn">接続テストして暗号化保存</button>
+              <p class="hint">保存後は api_key シートより優先されます。平文は保存されず、この欄もクリアされます。</p>
+            </details>
+            <details class="sub"><summary>SMTP を運営者が登録する</summary>
+              <input id="set-smtp-user" type="text" placeholder="SMTP ID" autocomplete="off">
+              <input id="set-smtp-pass" type="password" placeholder="SMTP パスワード" autocomplete="off">
+              <button id="set-smtp-btn">暗号化保存</button>
+            </details>
+            <pre id="cred-result" class="result-box" hidden></pre></div>
           <div><h3>遡及取得（13ヶ月）</h3><button id="backfill-btn">開始 / 再開</button> <button id="backfill-status-btn" class="secondary">状況</button> <button id="backfill-reset-btn" class="secondary">カーソル削除</button><pre id="backfill-result" class="result-box" hidden></pre></div>
           <div><h3>店舗トークン</h3><button id="token-btn">新規発行</button> <button id="revoke-btn" class="secondary">全失効</button><pre id="token-result" class="result-box" hidden></pre><p class="hint">発行した平文は一度しか表示されません。店舗へ安全な手段で渡してください。</p></div>
           <div><h3>状態変更</h3>

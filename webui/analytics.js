@@ -39,6 +39,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   loginError.hidden = true;
   if (!apiUrl || !token) { showLoginError('APIのURLとトークンの両方を入力してください。'); return; }
   state.apiUrl = apiUrl; state.token = token;
+  const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy');
   [state.from, state.to] = presetRange('this_year');
   document.getElementById('date-from').value = state.from;
   document.getElementById('date-to').value   = state.to;
@@ -49,7 +50,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   } catch (e) {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';
-  }
+  } finally { lb.disabled = false; lb.classList.remove('is-busy'); }
 });
 
 function showLoginError(msg) { loginError.textContent = msg; loginError.hidden = false; }
@@ -82,6 +83,10 @@ document.getElementById('apply-btn').addEventListener('click', async () => {
 async function load() {
   const status = document.getElementById('status-line');
   status.textContent = '集計中...';
+  const ab = document.getElementById('apply-btn'); ab.disabled = true; ab.classList.add('is-busy');
+  try { return await loadInner_(status); } finally { ab.disabled = false; ab.classList.remove('is-busy'); }
+}
+async function loadInner_(status) {
   let res;
   try {
     res = await callApi('get_analytics', { from: state.from, to: state.to });

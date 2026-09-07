@@ -11,16 +11,27 @@ const $ = id => document.getElementById(id);
 const show = (id, obj) => { const el = $(id); el.hidden = false; el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); };
 const esc = s => String(s ?? '');
 
+// ボタンの処理中表示（多重クリック防止＋スピナー）
+function busy(btn, on, label) {
+  btn.disabled = on;
+  const sp = btn.querySelector('.spinner'), lb = btn.querySelector('.label');
+  if (sp) sp.hidden = !on;
+  if (lb && label !== undefined) lb.textContent = label;
+  if (!sp) btn.classList.toggle('is-busy', on);
+}
+
 // ---- login ----
 $('login-btn').addEventListener('click', async () => {
   state.apiUrl = $('api-url').value.trim(); state.token = $('api-token').value.trim();
   $('login-error').hidden = true;
+  busy($('login-btn'), true, '確認中...');
   try {
     const r = await callApi('list_tenants');
     if (!r.ok) { $('login-error').textContent = 'ログイン失敗: ' + r.error; $('login-error').hidden = false; state.token = ''; return; }
     state.tenants = r.tenants; renderTenants(); loadSystem();
     $('login-screen').hidden = true; $('app-screen').hidden = false;
   } catch (e) { $('login-error').textContent = '通信エラー: ' + e.message; $('login-error').hidden = false; }
+  finally { busy($('login-btn'), false, 'ログイン'); }
 });
 $('logout-btn').addEventListener('click', () => { state.apiUrl = state.token = ''; state.tenants = []; $('api-token').value = ''; $('app-screen').hidden = true; $('login-screen').hidden = false; });
 $('reload-btn').addEventListener('click', reloadTenants);
@@ -33,7 +44,7 @@ async function reloadTenants() {
 async function loadSystem() {
   try { const r = await callApi('system_status'); if (r.ok) {
     const s = r.status;
-    $('system-status').textContent = `グローバル DRY_RUN: ${s.dry_run_global}   TEST_MAIL_TO: ${s.test_mail_to_set ? '設定あり（本番では空に）' : 'なし'}\nトリガー: ${s.triggers.join(', ') || 'なし'}\n稼働テナント: ${s.tenants_active.join(', ') || 'なし'}\n遡及取得中: ${s.backfill_pending.map(p => `${p.tenantId}@${p.cursor}`).join(', ') || 'なし'}`;
+    $('system-status').textContent = `暗号化キー(SECRETS_KEY): ${s.secrets_key_set ? '設定済' : '未設定（店舗セルフ登録・運営者登録が失敗します）'}\nグローバル DRY_RUN: ${s.dry_run_global}   TEST_MAIL_TO: ${s.test_mail_to_set ? '設定あり（本番では空に）' : 'なし'}\nトリガー: ${s.triggers.join(', ') || 'なし'}\n稼働テナント: ${s.tenants_active.join(', ') || 'なし'}\n遡及取得中: ${s.backfill_pending.map(p => `${p.tenantId}@${p.cursor}`).join(', ') || 'なし'}`;
   } } catch (e) { $('system-status').textContent = '取得失敗: ' + e.message; }
 }
 
@@ -43,7 +54,7 @@ function renderTenants() {
   state.tenants.forEach(t => {
     const tr = document.createElement('tr');
     const cells = [t.tenant_id, t.shop_name, `<span class="badge ${esc(t.status)}">${esc(t.status)}</span>`,
-      t.has_credentials ? `<span class="ok">${t.credentials_source === 'self' ? '店舗登録' : '運営登録'}</span> ${esc(t.credentials_expiry)}` : '<span class="ng">なし</span>',
+      t.has_credentials ? `<span class="ok">${t.credentials_source === 'self' ? '店舗登録' : (t.credentials_source === 'legacy' ? 'シート' : '運営登録')}</span> 期限 ${esc(String(t.credentials_expiry || '').slice(0, 10) || '-')}` : '<span class="ng">なし</span>',
       t.has_smtp ? '<span class="ok">店舗登録</span>' : (t.tenant_id === 'tokyoflower' ? 'config.php' : '<span class="ng">なし</span>'),
       esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-'];
     cells.forEach(c => { const td = document.createElement('td'); td.innerHTML = c; tr.appendChild(td); });
@@ -94,7 +105,7 @@ async function selectTenant(id) {
 function renderChecklist(t) {
   const items = [
     ['店舗から情報を受領（docs/ONBOARDING.md の依頼シート）', true, '手動'],
-    ['招待コードを発行し店舗へ渡す → 店舗が onboard.html で RMSキー・SMTP を登録', t.has_credentials && t.has_smtp, '「作成して招待コードを発行」'],
+    ['RMSキー・SMTP が登録済（店舗セルフ登録 or 運営者登録）', t.has_credentials && (t.has_smtp || t.tenant_id === 'tokyoflower'), '「作成して招待コードを発行」または「操作」→ 認証情報'],
     ['RMS 接続チェックが 200', null, '「操作」→ RMS 接続チェック'],
     ['settings.go_live_date を設定', !!t.settings.go_live_date, '「設定」タブ'],
     ['遡及取得（13ヶ月）を開始し完了', t.backfill_cursor ? false : null, '「操作」→ 遡及取得'],
@@ -133,9 +144,9 @@ function renderSettings(settings) {
 const tid = () => ({ tenant_id: state.current.tenant_id });
 const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventListener('click', async () => {
   if (confirmMsg && !confirm(confirmMsg)) return;
-  $(btnId).disabled = true;
+  busy($(btnId), true);
   try { const r = await callApi(action, Object.assign(tid(), extra ? extra() : {})); show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r); if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset'].includes(action)) await reloadTenants(); }
-  catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { $(btnId).disabled = false; }
+  catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
 });
 op('cred-btn', 'check_credentials', 'cred-result');
 op('backfill-btn', 'backfill_start', 'backfill-result', null, '13ヶ月分の受注を取り込みます（約30分、2分ごとに自動継続）。よろしいですか？');
@@ -145,6 +156,10 @@ op('token-btn', 'issue_tenant_token', 'token-result', null, '新しい店舗ト�
 op('revoke-btn', 'revoke_tenant_token', 'token-result', null, 'この店舗の有効トークンをすべて失効させます。店舗は再ログインできなくなります。');
 op('status-btn', 'set_tenant_status', 'status-result', () => ({ status: $('status-select').value }), 'テナントの状態を変更します。active にすると毎時パイプラインの対象になります。');
 op('bridge-btn', 'bridge_config_hint', 'bridge-result');
+op('set-cred-btn', 'set_credentials', 'cred-result', () => ({ service_secret: $('set-secret').value.trim(), license_key: $('set-license').value.trim(), license_expiry: $('set-expiry').value }), 'RMS へ接続テストを行い、成功した場合のみ暗号化保存します。');
+op('set-smtp-btn', 'set_smtp', 'cred-result', () => ({ smtp_user: $('set-smtp-user').value.trim(), smtp_pass: $('set-smtp-pass').value }));
+$('set-cred-btn').addEventListener('click', () => setTimeout(() => { $('set-secret').value = ''; $('set-license').value = ''; }, 3000));
+$('set-smtp-btn').addEventListener('click', () => setTimeout(() => { $('set-smtp-pass').value = ''; }, 3000));
 op('setup-sheets-btn', 'setup_config_sheets', 'misc-result');
 op('columns-btn', 'ensure_columns', 'misc-result');
 $('probe-btn').addEventListener('click', async () => {

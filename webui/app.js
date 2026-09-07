@@ -31,6 +31,8 @@ const appScreen   = document.getElementById('app-screen');
 const loginError  = document.getElementById('login-error');
 
 document.getElementById('login-btn').addEventListener('click', async () => {
+  const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy');
+  try {
   const apiUrl = document.getElementById('api-url').value.trim();
   const token  = document.getElementById('api-token').value.trim();
   loginError.hidden = true;
@@ -58,6 +60,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';
   }
+  } finally { lb.disabled = false; lb.classList.remove('is-busy'); }
 });
 
 function showLoginError(msg) {

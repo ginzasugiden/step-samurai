@@ -29,7 +29,9 @@ $('check-btn').addEventListener('click', async () => {
 
 $('agree').addEventListener('change', () => { $('submit-btn').disabled = !$('agree').checked; });
 
+$('check-btn').addEventListener('click', () => { $('check-btn').classList.add('is-busy'); $('check-btn').disabled = true; setTimeout(() => { $('check-btn').classList.remove('is-busy'); $('check-btn').disabled = false; }, 1500); });
 $('submit-btn').addEventListener('click', async () => {
+  $('submit-btn').classList.add('is-busy');
   const keys = ['shop_name', 'sid', 'shop_email', 'cc_email', 'service_secret', 'license_key', 'license_expiry', 'smtp_user', 'smtp_pass', 'follow_days', 'go_live_date'];
   const p = { invite: state.invite }; keys.forEach(k => { p[k] = $(k).value.trim(); });
   $('submit-btn').disabled = true; $('submit-result').hidden = false; $('submit-result').textContent = '楽天に接続テスト中...';
@@ -42,4 +44,5 @@ $('submit-btn').addEventListener('click', async () => {
     keys.forEach(k => { $(k).value = ''; });
     $('step2').hidden = true; $('step3').hidden = false; $('token-box').textContent = r.token;
   } catch (e) { $('submit-result').textContent = '通信エラー: ' + e.message; $('submit-btn').disabled = false; }
+  finally { $('submit-btn').classList.remove('is-busy'); }
 });

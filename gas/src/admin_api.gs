@@ -20,7 +20,7 @@ const ADMIN_ACTIONS_ = [
   'get_tenant_settings', 'set_tenant_setting',
   'check_credentials', 'probe_tenant', 'ensure_columns',
   'backfill_start', 'backfill_status', 'backfill_reset',
-  'bridge_config_hint', 'system_status', 'create_invite',
+  'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -53,6 +53,8 @@ function handleAdminAction_(req) {
       case 'bridge_config_hint':  return withTenant_(tenantId, () => adminBridgeHint_(tenantId));
       case 'system_status':       return jsonResponse_({ ok: true, status: adminSystemStatus_() });
       case 'create_invite':       return jsonResponse_(adminCreateInvite_(payload));
+      case 'set_credentials':     return withTenant_(tenantId, () => updateCredentials_(tenantId, payload)); // 接続テスト成功時のみ暗号化保存（onboarding.gs）
+      case 'set_smtp':            return withTenant_(tenantId, () => updateSmtp_(tenantId, payload));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });
     }
   } catch (e) {
@@ -90,7 +92,7 @@ function adminListTenants_() {
       try {
         const api = getApiKeyRow_(t.tenant_id);
         out.has_credentials = !!(api.get('serviceSecret') && api.get('licenseKey'));
-        out.credentials_expiry = String(api.get('expiry') || ''); out.credentials_source = 'legacy';
+        out.credentials_expiry = toJstDateString_(api.get('expiry')) || ''; out.credentials_source = 'legacy';
       } catch (e) { /* api_key 行なし */ }
     }
     out.has_smtp = !!getTenantSecretMeta_(t.tenant_id, 'smtp');
@@ -206,6 +208,7 @@ function adminSystemStatus_() {
   const props = PropertiesService.getScriptProperties();
   return {
     dry_run_global: isDryRun_(),
+    secrets_key_set: !!PropertiesService.getScriptProperties().getProperty('SECRETS_KEY'),
     test_mail_to_set: !!props.getProperty('TEST_MAIL_TO'),
     triggers: ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()),
     backfill_pending: listBackfillPendingTenants_(),

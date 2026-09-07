@@ -61,3 +61,26 @@ GASエディタで `runFollowMailsOnly` を手動実行する。
 - **クーポンAPI**: 楽天Coupon API（`/es/1.0/coupon/issue`, XML形式）の仕様が未解決のため、`runHourlyFollowPipeline`はクーポン経路（evaluateCoupons/issueCoupon）を呼ばない設計にしている。クーポン配信を有効化するには別途このAPI仕様の確認・検証が必要
 - **review_fetcher.py の常時稼働**: レビュー取得はSelenium版`review_fetcher.py`（本リポジトリ外）が担っているが、新しいPCでのタスクスケジューラ登録がまだ済んでいない。これが動いていないと`reviews`タブが更新されず、クーポン判定（レビュー必須条件）が機能しない
 - **ship_date空欄の注文の扱い**: 監査時点で「shipped」ステータスなのに`ship_date`が空の注文が多数存在することを確認済み（件数・一覧は監査報告参照）。これらはフォローメール対象の判定から現状単純に除外されているが、根本原因（RMS API応答に出荷日が含まれないケースがある等）の調査と対応方針は未定
+
+## (9) GAS リリース手順（コード反映と WebApp デプロイ更新）
+
+GAS への反映は 2 段階あり、`clasp push` だけでは管理画面に反映されない。
+
+1. **コード反映**: `cd gas && clasp push -u ginzasugiden -f`
+   - 反映されるのは GAS エディタからの手動実行分と、時間トリガー（`runHourlyFollowPipeline` 等）の実行分のみ
+   - `gas/src/appsscript.json` の `webapp` セクション（executeAs=USER_DEPLOYING / access=ANYONE_ANONYMOUS）を消さないこと。
+     push はサーバー側 manifest を上書きするため、無いままデプロイを更新すると WebApp が 404 になる（2026-09-07 に発生）
+2. **管理画面（WebApp）へ反映**: 既存デプロイを新バージョンで更新する（URL は変わらない）
+   ```
+   cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1EUtC8oXGpFRwZ67vJSC8vL4BQySoomPqI_7w -d "<説明>"
+   ```
+   - 成功判定: 出力の deployment ID が上記と同一で、`@N` のバージョン番号が増えている
+   - **`-i` 無しの `clasp deploy` は禁止**。新規デプロイが作られて URL が変わり、`webui/config.js` の `STEP_SAMURAI_API` を向く管理画面が壊れる
+   - 日本語の説明文を付ける場合は PowerShell から実行する（Git Bash 経由は文字化けする）
+3. **ロールバック**: 同じ `-i` に旧バージョン番号を指定する
+   ```
+   cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1EUtC8oXGpFRwZ67vJSC8vL4BQySoomPqI_7w -V <旧バージョン番号>
+   ```
+   旧バージョン番号は事前に `clasp deployments -u ginzasugiden` の `@N` で控えておく
+4. **反映後の確認**: 管理画面を Ctrl+F5 で再読み込みする。疎通は GET `/exec` が 200 で案内文、
+   POST `{"action":"ping"}` が `{"ok":false,"error":"unauthorized"}` を返せば正常（認証前の応答）

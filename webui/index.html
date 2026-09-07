@@ -13,13 +13,21 @@
     <h1>step-samurai 管理画面</h1>
     <p class="hint">このページを閉じると再ログインが必要です（APIのURL・トークンはブラウザのメモリ上にのみ保持され、保存されません）。</p>
 
-    <label for="api-url">API のURL</label>
-    <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
+    <label for="tenant-id">店舗ID</label>
+    <input id="tenant-id" type="text" placeholder="例: tokyoflower" autocomplete="username" autocapitalize="off">
 
-    <label for="api-token">アクセストークン</label>
-    <input id="api-token" type="password" placeholder="発行されたトークンを入力" autocomplete="new-password">
+    <label for="password">パスワード</label>
+    <input id="password" type="password" autocomplete="current-password">
 
     <button id="login-btn">ログイン</button>
+
+    <details class="adv"><summary>アクセストークンでログイン／API のURLを変更する</summary>
+      <label for="api-url">API のURL</label>
+      <input id="api-url" type="text" placeholder="空なら既定のURLを使用" autocomplete="off">
+      <label for="api-token">アクセストークン</label>
+      <input id="api-token" type="password" placeholder="発行されたトークンを入力" autocomplete="new-password">
+      <button id="token-login-btn" class="secondary">トークンでログイン</button>
+    </details>
     <p id="login-error" class="error" hidden></p>
   </div>
 </div>
@@ -86,6 +94,11 @@
       <h2>認証情報（楽天API・SMTP）</h2>
       <p class="hint">登録済みの内容は暗号化されており、ここにも運営者にも表示されません。licenseKey の期限が近づいたら新しいキーを発行して更新してください（接続テストに成功した場合のみ保存されます）。</p>
       <pre id="cred-status" class="result-box">読込中...</pre>
+      <h3>ログインパスワードの変更</h3>
+      <div class="row"><input id="pw-current" type="password" placeholder="現在のパスワード" autocomplete="current-password"></div>
+      <div class="row"><input id="pw-new" type="password" placeholder="新しいパスワード（8文字以上）" autocomplete="new-password"></div>
+      <button id="pw-change-btn">変更</button>
+      <p class="hint">変更すると全ての端末でログアウトされます。</p>
       <h3>楽天ペイ受注API キーの更新</h3>
       <div class="row"><input id="cred-secret" type="password" placeholder="serviceSecret" autocomplete="off"></div>
       <div class="row"><input id="cred-license" type="password" placeholder="licenseKey" autocomplete="off"></div>
@@ -100,6 +113,7 @@
   </main>
 </div>
 
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

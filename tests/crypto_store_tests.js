@@ -24,9 +24,10 @@ class Sheet { constructor(rows) { this.rows = rows.map(r => r.slice()); }
   appendRow(r) { this.rows.push(r.slice()); } deleteRow(i) { this.rows.splice(i - 1, 1); } }
 class SS { constructor(sheets) { this.sheets = sheets; } getSheetByName(n) { return this.sheets[n] || null; } insertSheet(n) { return (this.sheets[n] = new Sheet([])); } }
 const master = new Sheet([['tenant_id','shop_name','spreadsheet_id','status','shop_email','cc_email'], ['hanaya','花屋','SS_H','setup','h@example.jp','']]);
+const tenantAuth = new Sheet([['tenant_id','token_hash','issued_at','status']]);
 const settings = new Sheet([['key','value','description','editable_by_tenant']]);
 const templates = new Sheet([['template_id','subject','body','updated_at']]);
-const books = { MASTER: new SS({ tenants: master }), SS_H: new SS({ settings, templates }) };
+const books = { MASTER: new SS({ tenants: master, tenant_auth: tenantAuth }), SS_H: new SS({ settings, templates }) };
 const SpreadsheetApp = { openById: id => books[id] };
 let rmsCode = 200;
 const UrlFetchApp = { fetch: () => ({ getResponseCode: () => rmsCode, getContentText: () => JSON.stringify({ MessageModelList: [{ messageType: rmsCode === 200 ? 'INFO' : 'ERROR', messageCode: rmsCode === 200 ? 'ORDER_EXT_API_SEARCH_ORDER_INFO_101' : 'AUTH_ERROR' }] }) }) };
@@ -59,7 +60,7 @@ let invite;
 t('招待発行・検証', () => { invite = ctx.createInvite_('hanaya').invite; assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); assert.equal(ctx.verifyInvite_('wrong', false), null); assert.ok(!JSON.stringify(books.MASTER.sheets.invites.rows).includes(invite)); });
 t('onboard_check は秘密を返さない', () => { const r = ctx.onboardCheck_({ invite }); assert.equal(r.ok, true); assert.equal(r.tenant_id, 'hanaya'); assert.ok(!('token' in r)); });
 t('入力不足は保存しない', () => { const r = ctx.onboardSubmit_({ invite, sid: '123', shop_name: 'x' }); assert.equal(r.error, 'validation'); assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); });
-const good = { invite, sid: '123456', shop_name: '花屋', shop_email: 'h@example.jp', service_secret: 'SS', license_key: 'LK', license_expiry: '2027-09-01', smtp_user: 'smtpuser', smtp_pass: 'pw', follow_days: '4', go_live_date: '2026-10-01' };
+const good = { invite, sid: '123456', shop_name: '花屋', shop_email: 'h@example.jp', service_secret: 'SS', license_key: 'LK', license_expiry: '2027-09-01', smtp_user: 'smtpuser', smtp_pass: 'pw', follow_days: '4', go_live_date: '2026-10-01', login_password: 'hanaya-pass1' };
 t('RMS 認証失敗なら保存せず招待も消費しない', () => { rmsCode = 401; const r = ctx.onboardSubmit_(good); assert.equal(r.error, 'rms_auth_failed'); assert.equal(ctx.getTenantSecret_('hanaya', 'smtp'), null); assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); rmsCode = 200; });
 t('成功時: 暗号化保存・settings反映・トークン発行・招待消費・運営者通知', () => {
   const r = ctx.onboardSubmit_(good); assert.equal(r.ok, true); assert.ok(r.token.length > 40);
@@ -68,7 +69,8 @@ t('成功時: 暗号化保存・settings反映・トークン発行・招待消�
   assert.equal(ctx.verifyInvite_(invite, false), null);
   assert.equal(ctx.verifyTenantToken_(r.token), 'hanaya');
   assert.equal(settings.rows.find(x => x[0] === 'follow_days_after_ship')[1], '4'); assert.equal(settings.rows.find(x => x[0] === 'go_live_date')[1], '2026-10-01'); assert.equal(settings.rows.find(x => x[0] === 'dry_run')[1], 'true');
-  assert.equal(notified.length, 1); });
+  assert.equal(notified.length, 1);
+  assert.ok(ctx.loginWithPassword_('hanaya', 'hanaya-pass1'), '登録したパスワードでログインできる'); assert.equal(ctx.loginWithPassword_('hanaya', 'wrong'), null); });
 t('credentialsStatus_ は秘密を含まない', () => { const s = JSON.stringify(ctx.credentialsStatus_('hanaya')); assert.ok(!s.includes('LK') && !s.includes('"pw"')); assert.ok(s.includes('sm****er')); });
 t('updateCredentials_ は接続失敗なら保存しない', () => { rmsCode = 401; assert.equal(ctx.updateCredentials_('hanaya', { service_secret: 'N', license_key: 'N' }).error, 'rms_auth_failed'); assert.equal(ctx.getTenantSecret_('hanaya', 'rms').secret.license_key, 'LK'); rmsCode = 200; assert.equal(ctx.updateCredentials_('hanaya', { service_secret: 'N', license_key: 'N2', license_expiry: '2028-01-01' }).ok, true); assert.equal(ctx.getTenantSecret_('hanaya', 'rms').secret.license_key, 'N2'); });
 

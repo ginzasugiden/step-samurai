@@ -48,28 +48,26 @@ const loginScreen = document.getElementById('login-screen');
 const appScreen   = document.getElementById('app-screen');
 const loginError  = document.getElementById('login-error');
 
-document.getElementById('login-btn').addEventListener('click', async () => {
+// API URL: 詳細設定の入力があればそれ、無ければ config.js の既定値
+function resolveApiUrl() {
+  const typed = (document.getElementById('api-url').value || '').trim();
+  if (typed) return typed;
+  const conf = String(window.STEP_SAMURAI_API || '');
+  return conf.startsWith('https://') ? conf : '';
+}
+
+async function loginCommon(getToken) {
   const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy'); showOverlay('ログインしています...');
-  try {
-  const apiUrl = document.getElementById('api-url').value.trim();
-  const token  = document.getElementById('api-token').value.trim();
   loginError.hidden = true;
-
-  if (!apiUrl || !token) {
-    showLoginError('APIのURLとトークンの両方を入力してください。');
-    return;
-  }
-
-  state.apiUrl = apiUrl;
-  state.token  = token;
-
   try {
+    const apiUrl = resolveApiUrl();
+    if (!apiUrl) { showLoginError('API のURLが設定されていません（詳細設定で入力してください）。'); return; }
+    state.apiUrl = apiUrl;
+    const token = await getToken(apiUrl);
+    if (!token) return;
+    state.token = token;
     const res = await callApi('get_settings', {});
-    if (!res.ok) {
-      showLoginError('ログインに失敗しました: ' + (res.error || '不明なエラー'));
-      state.token = '';
-      return;
-    }
+    if (!res.ok) { showLoginError('ログインに失敗しました: ' + (res.error || '不明なエラー')); state.token = ''; return; }
     state.settings = res.settings || [];
     await loadAll();
     loginScreen.hidden = true;
@@ -77,9 +75,28 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   } catch (e) {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';
-  }
   } finally { lb.disabled = false; lb.classList.remove('is-busy'); hideOverlay(); }
-});
+}
+
+// 店舗ID＋パスワード（既定）
+document.getElementById('login-btn').addEventListener('click', () => loginCommon(async (apiUrl) => {
+  const tenantId = document.getElementById('tenant-id').value.trim().toLowerCase();
+  const password = document.getElementById('password').value;
+  if (!tenantId || !password) { showLoginError('店舗IDとパスワードを入力してください。'); return null; }
+  const res = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'login', payload: { tenant_id: tenantId, password } }) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const r = await res.json();
+  if (!r.ok) { showLoginError('店舗IDまたはパスワードが違います。'); return null; }
+  document.getElementById('password').value = '';
+  return r.token;
+}));
+
+// アクセストークン（従来・運営者や自動化向け）
+document.getElementById('token-login-btn').addEventListener('click', () => loginCommon(async () => {
+  const token = document.getElementById('api-token').value.trim();
+  if (!token) { showLoginError('トークンを入力してください。'); return null; }
+  return token;
+}));
 
 function showLoginError(msg) {
   loginError.textContent = msg;
@@ -93,6 +110,7 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   state.templates = [];
   document.getElementById('api-url').value = '';
   document.getElementById('api-token').value = '';
+  document.getElementById('password').value = '';
   appScreen.hidden = true;
   loginScreen.hidden = false;
 });
@@ -407,5 +425,16 @@ document.getElementById('smtp-update-btn').addEventListener('click', async () =>
     const res = await callApi('update_smtp', { smtp_user: document.getElementById('smtp-user').value.trim(), smtp_pass: document.getElementById('smtp-pass').value });
     box.textContent = res.ok ? `更新しました（ID ${res.smtp_user_masked}）` : '失敗: ' + res.error;
     if (res.ok) document.getElementById('smtp-pass').value = '';
+  } catch (e) { box.textContent = '通信エラー: ' + e.message; }
+});
+
+
+// ===== パスワード変更 =====
+document.getElementById('pw-change-btn').addEventListener('click', async () => {
+  const box = document.getElementById('cred-result'); box.hidden = false; box.textContent = '変更中...';
+  try {
+    const res = await callApi('change_password', { current_password: document.getElementById('pw-current').value, new_password: document.getElementById('pw-new').value });
+    box.textContent = res.ok ? '変更しました。再度ログインしてください。' : ({ password_too_short: '8文字以上にしてください', current_password_wrong: '現在のパスワードが違います' }[res.error] || '失敗: ' + res.error);
+    if (res.ok) setTimeout(() => document.getElementById('logout-btn').click(), 1500);
   } catch (e) { box.textContent = '通信エラー: ' + e.message; }
 });

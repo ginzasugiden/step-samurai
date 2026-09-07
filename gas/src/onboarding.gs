@@ -75,6 +75,7 @@ function onboardSubmit_(payload) {
   if (!p('service_secret') || !p('license_key')) errors.push('serviceSecret / licenseKey');
   if (p('license_expiry') && !toJstDateString_(p('license_expiry'))) errors.push('ライセンス有効期限の形式');
   if (!p('smtp_user') || !p('smtp_pass'))        errors.push('あんしんメルアド SMTP ID / パスワード');
+  if (String(payload.login_password || '').length < 8) errors.push('ログインパスワード（8文字以上）');
   if (errors.length) return { ok: false, error: 'validation', fields: errors };
 
   // RMS 接続テスト（保存前・読み取りのみ）
@@ -98,6 +99,7 @@ function onboardSubmit_(payload) {
   } catch (e) { Logger.log(`onboardSubmit_ settings skip [${tenantId}]: ${e.message}`); }
 
   verifyInvite_(payload.invite, true); // 使用済みに
+  setTenantPassword_(tenantId, String(payload.login_password));
   const token = issueTenantToken_(tenantId);
   notifyAdmin_(`[step-samurai] 店舗 ${tenantId}（${p('shop_name')}）がセルフ登録を完了しました。admin.html で内容を確認し、遡及取得→稼働化へ進めてください。`);
   return { ok: true, tenant_id: tenantId, token: token, rms_shop: test.rms_message || 'OK' };

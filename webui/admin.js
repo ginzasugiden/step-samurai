@@ -31,7 +31,7 @@ const esc = s => String(s ?? '');
 // トークンをコピーボタン付きで表示（一度しか表示されないため、消えない・選択できる形にする）
 function showToken(resultId, token) {
   const el = $(resultId); el.hidden = false; el.textContent = '';
-  const p = document.createElement('div'); p.textContent = '店舗トークン（この表示は再読込まで残ります。必ず控えてください）';
+  const p = document.createElement('div'); p.textContent = 'この表示は再読込まで残ります。必ず控えてください（再表示はできません）';
   const code = document.createElement('code'); code.textContent = token; code.style.display = 'block'; code.style.margin = '0.4rem 0'; code.style.wordBreak = 'break-all'; code.style.userSelect = 'all';
   const btn = document.createElement('button'); btn.textContent = 'コピー'; btn.className = 'secondary';
   btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(token); btn.textContent = 'コピーしました'; } catch (e) { btn.textContent = '手動で選択してコピーしてください'; } });
@@ -49,8 +49,10 @@ function busy(btn, on, label) {
 
 // ---- login ----
 $('login-btn').addEventListener('click', async () => {
-  state.apiUrl = $('api-url').value.trim(); state.token = $('api-token').value.trim();
+  const typed = $('api-url').value.trim(); const conf = String(window.STEP_SAMURAI_API || '');
+  state.apiUrl = typed || (conf.startsWith('https://') ? conf : ''); state.token = $('api-token').value.trim();
   $('login-error').hidden = true;
+  if (!state.apiUrl) { $('login-error').textContent = 'API のURLが設定されていません（config.js または詳細設定）。'; $('login-error').hidden = false; return; }
   busy($('login-btn'), true, '確認中...'); showOverlay('ログインしています...');
   try {
     const r = await callApi('list_tenants');
@@ -83,7 +85,7 @@ function renderTenants() {
     const cells = [t.tenant_id, t.shop_name, `<span class="badge ${esc(t.status)}">${esc(t.status)}</span>`,
       t.has_credentials ? `<span class="ok">${t.credentials_source === 'self' ? '店舗登録' : (t.credentials_source === 'legacy' ? 'シート' : '運営登録')}</span> 期限 ${esc(String(t.credentials_expiry || '').slice(0, 10) || '-')}` : '<span class="ng">なし</span>',
       t.has_smtp ? '<span class="ok">店舗登録</span>' : (t.tenant_id === 'tokyoflower' ? 'config.php' : '<span class="ng">なし</span>'),
-      esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-'];
+      esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), t.has_password ? '<span class="ok">設定済</span>' : '<span class="ng">未設定</span>', `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-'];
     cells.forEach(c => { const td = document.createElement('td'); td.innerHTML = c; tr.appendChild(td); });
     const td = document.createElement('td'); const b = document.createElement('button'); b.textContent = '開く'; b.className = 'secondary';
     b.addEventListener('click', () => selectTenant(t.tenant_id)); td.appendChild(b); tr.appendChild(td);
@@ -106,7 +108,7 @@ $('invite-btn').addEventListener('click', async () => {
   $('invite-btn').disabled = true;
   try {
     const r = await callApi('create_invite', p);
-    if (r.ok) show('create-result', `招待コード（一度しか表示されません）:\n${r.invite}\n有効期限: ${r.expires_at}\n\n店舗へ渡すURL（コードを含む）:\n${r.onboard_url}#invite=${r.invite}&api=${encodeURIComponent(state.apiUrl)}\n\n※ URL はフラグメント(#)で渡すためサーバのログには残りません。メール本文に直接書かず、安全な経路で渡してください。`);
+    if (r.ok) show('create-result', `招待コード（一度しか表示されません）:\n${r.invite}\n有効期限: ${r.expires_at}\n\n店舗へ渡すURL（コードを含む）:\n${r.onboard_url}#invite=${r.invite}\n\n※ URL はフラグメント(#)で渡すためサーバのログには残りません。メール本文に直接書かず、安全な経路で渡してください。`);
     else show('create-result', r);
     await reloadTenants();
   } catch (e) { show('create-result', '通信エラー: ' + e.message); } finally { $('invite-btn').disabled = false; }
@@ -124,7 +126,7 @@ async function selectTenant(id) {
   state.current = t; $('detail-id').textContent = `${t.tenant_id}（${t.shop_name}）`; $('detail-card').hidden = false;
   $('status-select').value = t.status;
   if (switched) {
-    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result'].forEach(i => { $(i).hidden = true; });
+    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result'].forEach(i => { $(i).hidden = true; });
     document.querySelector('#probe-table tbody').innerHTML = '';
   }
   renderChecklist(t);
@@ -178,12 +180,14 @@ const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventList
   try {
     const r = await callApi(action, Object.assign(tid(), extra ? extra() : {}));
     if (action === 'issue_tenant_token' && r.ok) showToken(resultId, r.token);
+    else if (action === 'reset_password' && r.ok) showToken(resultId, r.password);
     else show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r);
     if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp'].includes(action)) await reloadTenants();
   }
   catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
 });
 op('cred-btn', 'check_credentials', 'cred-result');
+op('pw-reset-btn', 'reset_password', 'pw-result', null, 'この店舗のログインパスワードを再設定します（既存のパスワードとセッションは無効になります）。');
 op('backfill-btn', 'backfill_start', 'backfill-result', null, '13ヶ月分の受注を取り込みます（約30分、2分ごとに自動継続）。よろしいですか？');
 op('backfill-status-btn', 'backfill_status', 'backfill-result');
 op('backfill-reset-btn', 'backfill_reset', 'backfill-result', null, '遡及取得の進捗カーソルを削除します。次回は13ヶ月前からやり直しになります。');

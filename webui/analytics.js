@@ -51,25 +51,52 @@ const loginScreen = document.getElementById('login-screen');
 const appScreen   = document.getElementById('app-screen');
 const loginError  = document.getElementById('login-error');
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-  const apiUrl = document.getElementById('api-url').value.trim();
-  const token  = document.getElementById('api-token').value.trim();
-  loginError.hidden = true;
-  if (!apiUrl || !token) { showLoginError('APIのURLとトークンの両方を入力してください。'); return; }
-  state.apiUrl = apiUrl; state.token = token;
+function resolveApiUrl() {
+  const typed = (document.getElementById('api-url').value || '').trim();
+  if (typed) return typed;
+  const conf = String(window.STEP_SAMURAI_API || '');
+  return conf.startsWith('https://') ? conf : '';
+}
+
+async function loginCommon(getToken) {
   const lb = document.getElementById('login-btn'); lb.disabled = true; lb.classList.add('is-busy'); showOverlay('ログインして集計しています...');
-  [state.from, state.to] = presetRange('this_year');
-  document.getElementById('date-from').value = state.from;
-  document.getElementById('date-to').value   = state.to;
+  loginError.hidden = true;
   try {
+    const apiUrl = resolveApiUrl();
+    if (!apiUrl) { showLoginError('API のURLが設定されていません（詳細設定で入力してください）。'); return; }
+    state.apiUrl = apiUrl;
+    const token = await getToken(apiUrl);
+    if (!token) return;
+    state.token = token;
+    [state.from, state.to] = presetRange('this_year');
+    document.getElementById('date-from').value = state.from;
+    document.getElementById('date-to').value   = state.to;
     const ok = await load();
-    if (!ok) return;
+    if (!ok) { state.token = ''; return; }
     loginScreen.hidden = true; appScreen.hidden = false;
   } catch (e) {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';
   } finally { lb.disabled = false; lb.classList.remove('is-busy'); hideOverlay(); }
-});
+}
+
+document.getElementById('login-btn').addEventListener('click', () => loginCommon(async (apiUrl) => {
+  const tenantId = document.getElementById('tenant-id').value.trim().toLowerCase();
+  const password = document.getElementById('password').value;
+  if (!tenantId || !password) { showLoginError('店舗IDとパスワードを入力してください。'); return null; }
+  const res = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'login', payload: { tenant_id: tenantId, password } }) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const r = await res.json();
+  if (!r.ok) { showLoginError('店舗IDまたはパスワードが違います。'); return null; }
+  document.getElementById('password').value = '';
+  return r.token;
+}));
+
+document.getElementById('token-login-btn').addEventListener('click', () => loginCommon(async () => {
+  const token = document.getElementById('api-token').value.trim();
+  if (!token) { showLoginError('トークンを入力してください。'); return null; }
+  return token;
+}));
 
 function showLoginError(msg) { loginError.textContent = msg; loginError.hidden = false; }
 
@@ -77,6 +104,7 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   state.apiUrl = ''; state.token = ''; state.data = null;
   document.getElementById('api-url').value = '';
   document.getElementById('api-token').value = '';
+  document.getElementById('password').value = '';
   appScreen.hidden = true; loginScreen.hidden = false;
 });
 
@@ -102,7 +130,7 @@ async function load() {
   const status = document.getElementById('status-line');
   status.textContent = '集計中...';
   const ab = document.getElementById('apply-btn'); ab.disabled = true; ab.classList.add('is-busy');
-  if (!loginScreen.hidden === false) showOverlay('集計しています...');
+  if (loginScreen.hidden) showOverlay('集計しています...');
   try { return await loadInner_(status); } finally { ab.disabled = false; ab.classList.remove('is-busy'); hideOverlay(); }
 }
 async function loadInner_(status) {

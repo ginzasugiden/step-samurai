@@ -13,12 +13,13 @@
   <div class="login-box">
     <h1>step-samurai 運営管理</h1>
     <p class="hint">サービス運営者専用。ADMIN_TOKEN でログインします（店舗のトークンでは入れません）。ブラウザには保存されません。</p>
-    <label for="api-url">API のURL</label>
-    <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off">
     <label for="api-token">管理者トークン</label>
     <input id="api-token" type="password" autocomplete="new-password">
     <button id="login-btn"><span class="spinner" hidden></span><span class="label">ログイン</span></button>
     <p id="login-error" class="error" hidden></p>
+    <details class="adv"><summary>API のURLを変更する</summary>
+      <input id="api-url" type="text" placeholder="空なら既定のURLを使用" autocomplete="off">
+    </details>
   </div>
 </div>
 
@@ -37,7 +38,7 @@
     <section class="card">
       <h2>テナント一覧</h2>
       <div class="table-wrap"><table id="tenant-table"><thead>
-        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>RMSキー</th><th>SMTP</th><th>稼働開始日</th><th>dry_run</th><th>トークン</th><th>遡及</th><th></th></tr>
+        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>RMSキー</th><th>SMTP</th><th>稼働開始日</th><th>dry_run</th><th>PW</th><th>トークン</th><th>遡及</th><th></th></tr>
       </thead><tbody></tbody></table></div>
     </section>
 
@@ -95,7 +96,8 @@
             </details>
             <pre id="cred-result" class="result-box" hidden></pre></div>
           <div><h3>遡及取得（13ヶ月）</h3><button id="backfill-btn">開始 / 再開</button> <button id="backfill-status-btn" class="secondary">状況</button> <button id="backfill-reset-btn" class="secondary">カーソル削除</button><pre id="backfill-result" class="result-box" hidden></pre></div>
-          <div><h3>店舗トークン</h3><button id="token-btn">新規発行</button> <button id="revoke-btn" class="secondary">全失効</button><pre id="token-result" class="result-box" hidden></pre><p class="hint">発行した平文は一度しか表示されません。店舗へ安全な手段で渡してください。</p></div>
+          <div><h3>店舗ログイン（店舗ID＋パスワード）</h3><button id="pw-reset-btn">パスワードを再設定（自動生成）</button><pre id="pw-result" class="result-box" hidden></pre><p class="hint">店舗ID は tenant_id。生成したパスワードは一度しか表示されません。店舗は管理画面「認証情報」から自分で変更できます。</p></div>
+          <div><h3>店舗トークン（自動化・運営者向け）</h3><button id="token-btn">新規発行</button> <button id="revoke-btn" class="secondary">全失効</button><pre id="token-result" class="result-box" hidden></pre><p class="hint">発行した平文は一度しか表示されません。店舗へ安全な手段で渡してください。</p></div>
           <div><h3>状態変更</h3>
             <select id="status-select"><option value="setup">setup</option><option value="paused">paused</option><option value="active">active</option><option value="disabled">disabled</option></select>
             <button id="status-btn">変更</button><pre id="status-result" class="result-box" hidden></pre></div>
@@ -106,6 +108,7 @@
     </section>
   </main>
 </div>
+<script src="config.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>

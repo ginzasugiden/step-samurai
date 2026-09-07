@@ -238,6 +238,7 @@ details.sub input { display: block; width: 100%; margin: 0.3rem 0; }
 
 
 /* 全画面オーバーレイ（ログイン・長い処理） */
+#ss-overlay[hidden] { display: none !important; }
 #ss-overlay {
   position: fixed; inset: 0; z-index: 9999;
   background: rgba(20, 24, 33, 0.55);
@@ -249,3 +250,6 @@ details.sub input { display: block; width: 100%; margin: 0.3rem 0; }
   border: 5px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%;
   animation: spin 0.9s linear infinite;
 }
+
+details.adv { margin: 0.5rem 0 1rem; font-size: 0.85rem; }
+details.adv summary { cursor: pointer; color: var(--text-muted); }

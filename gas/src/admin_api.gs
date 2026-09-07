@@ -20,7 +20,7 @@ const ADMIN_ACTIONS_ = [
   'get_tenant_settings', 'set_tenant_setting',
   'check_credentials', 'probe_tenant', 'ensure_columns',
   'backfill_start', 'backfill_status', 'backfill_reset',
-  'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp',
+  'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp', 'reset_password',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -55,6 +55,7 @@ function handleAdminAction_(req) {
       case 'create_invite':       return jsonResponse_(adminCreateInvite_(payload));
       case 'set_credentials':     return withTenant_(tenantId, () => updateCredentials_(tenantId, payload)); // 接続テスト成功時のみ暗号化保存（onboarding.gs）
       case 'set_smtp':            return withTenant_(tenantId, () => updateSmtp_(tenantId, payload));
+      case 'reset_password':      return withTenant_(tenantId, () => ({ ok: true, tenant_id: tenantId, password: setTenantPassword_(tenantId, String(payload.password || '') || null) }));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });
     }
   } catch (e) {
@@ -75,13 +76,14 @@ function withTenant_(tenantId, fn) {
 
 function adminListTenants_() {
   const tenants   = listAllTenants_();
-  const authRows  = getTenantAuthSheet_().getDataRange().getValues().slice(1);
+  const authRows  = ensureAuthColumns_().getDataRange().getValues().slice(1);
   const pending   = listBackfillPendingTenants_();
   return tenants.map(t => {
     const out = {
       tenant_id: t.tenant_id, shop_name: t.shop_name, status: t.status,
       shop_email: t.shop_email, cc_email: t.cc_email, spreadsheet_id: t.spreadsheet_id,
-      active_tokens: authRows.filter(r => String(r[0]) === t.tenant_id && r[3] === 'active').length,
+      active_tokens: authRows.filter(r => String(r[0]) === t.tenant_id && r[3] === 'active' && String(r[4] || 'token') === 'token').length,
+      has_password:  authRows.some(r => String(r[0]) === t.tenant_id && r[3] === 'active' && String(r[4] || '') === 'password'),
       has_credentials: false, credentials_expiry: '',
       backfill_cursor: (pending.find(p => p.tenantId === t.tenant_id) || {}).cursor || null,
       settings: {},

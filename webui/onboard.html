@@ -14,8 +14,8 @@
 
   <section class="card" id="step1">
     <h2>1. 招待コード</h2>
-    <label>API のURL（運営者から案内） <input id="api-url" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" autocomplete="off"></label>
     <label>招待コード <input id="invite" type="text" autocomplete="off"></label>
+    <details class="adv"><summary>API のURLを変更する（通常は不要）</summary><input id="api-url" type="text" placeholder="空なら既定のURLを使用" autocomplete="off"></details>
     <button id="check-btn">確認</button>
     <p id="check-result" class="hint"></p>
   </section>
@@ -44,7 +44,14 @@
       <label>SMTP パスワード <input id="smtp_pass" type="password" autocomplete="new-password"></label>
     </div>
 
-    <h2>5. 運用の希望</h2>
+    <h2>5. 管理画面のログインパスワード</h2>
+    <p class="hint">店舗ID（<span id="tenant-id-label"></span>）とこのパスワードで管理画面・店舗分析にログインします。8文字以上。</p>
+    <div class="form-grid">
+      <label>パスワード <input id="login_password" type="password" autocomplete="new-password"></label>
+      <label>パスワード（確認） <input id="login_password2" type="password" autocomplete="new-password"></label>
+    </div>
+
+    <h2>6. 運用の希望</h2>
     <div class="form-grid">
       <label>発送後何日でフォローメールを送るか <input id="follow_days" type="number" value="5" min="1" max="30"></label>
       <label>稼働開始希望日（この日以降の発送分から送信） <input id="go_live_date" type="date"></label>
@@ -57,9 +64,8 @@
 
   <section class="card" id="step3" hidden>
     <h2>登録完了</h2>
-    <p>以下の <b>アクセストークン</b> を安全な場所に保管してください。<b>この画面を閉じると二度と表示されません。</b>運営者も見ることができないため、紛失した場合は運営者に再発行を依頼してください。</p>
-    <pre id="token-box" class="result-box"></pre>
-    <p>このトークンで <a href="index.html">管理画面</a>（設定・文面・テスト送信・レビュー取込）と <a href="analytics.html">店舗分析</a> にログインできます。実際の送信は運営者が最終確認のうえ開始します。</p>
+    <p>店舗ID <b id="done-tenant-id"></b> と、設定したパスワードで <a href="index.html">管理画面</a>（設定・文面・テスト送信・レビュー取込）と <a href="analytics.html">店舗分析</a> にログインできます。実際の送信は運営者が最終確認のうえ開始します。</p>
+    <details class="adv"><summary>アクセストークン（自動化用・通常は不要）</summary><pre id="token-box" class="result-box"></pre><p class="hint">この画面を閉じると二度と表示されません。</p></details>
   </section>
 
   <section class="card">
@@ -74,6 +80,7 @@
     </ul>
   </section>
 </main>
+<script src="config.js"></script>
 <script src="onboard.js"></script>
 </body>
 </html>

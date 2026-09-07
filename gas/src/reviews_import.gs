@@ -22,10 +22,28 @@ const REVIEW_CSV_COLUMN_HINTS_ = {
   order_number: ['注文番号', '受注番号', 'order_number', 'ordernumber'],
   item_code:    ['商品管理番号', '商品番号', 'item_code', 'itemnumber', '商品コード'],
   rating:       ['総合評価', '評価', 'rating', '点数', '星'],
-  posted_at:    ['投稿日時', '投稿日', 'posted_at', '登録日時', '日時'],
-  body:         ['レビュー内容', 'コメント', '本文', 'body', 'レビュー本文', '内容'],
+  posted_at:    ['投稿日時', '投稿時間', '投稿日', 'posted_at', '登録日時', '日時'],
+  body:         ['レビュー内容', 'コメント', 'レビュー本文', '本文', 'body', '内容'],
   buyer_key:    ['購入者', 'buyer', 'レビュアー', 'ニックネーム'],
+  // 以下は RMS「レビューチェックツール」CSV（2026-09 時点の実ファイル）にある補助列
+  review_type:  ['レビュータイプ', 'review_type', '種別'],
+  title:        ['タイトル', 'title'],
+  review_url:   ['レビュー詳細url', 'review_url', 'url'],
 };
+
+/**
+ * review_id を決める。
+ *  1. CSV に レビューID 列があればそれ
+ *  2. レビュー詳細URL があればそれ（RMS CSV は1レビュー1URLで一意。商品レビューとショップレビューが
+ *     同一注文・同一時刻で並ぶため、注文番号＋時刻だけでは衝突して片方が上書きされる）
+ *  3. それも無ければ csv_<種別>_<注文番号>_<時刻> を生成
+ */
+function buildReviewId_(explicitId, reviewUrl, reviewType, orderNumber, postedAt) {
+  if (explicitId) return explicitId;
+  if (reviewUrl) return reviewUrl;
+  const type = reviewType ? String(reviewType).replace(/[^\w\u3040-\u9fff]/g, '') : '';
+  return `csv_${type ? type + '_' : ''}${orderNumber}_${String(postedAt).replace(/[^\d]/g, '')}`;
+}
 
 /** RFC4180 風の CSV パーサ（ダブルクォート・改行含みセル・CRLF・BOM 対応） */
 function parseCsv_(text) {
@@ -97,7 +115,10 @@ function importReviewsFromCsv_(tenantId, csvText, preview) {
     const orderNumber = get(r, 'order_number');
     const postedAt    = normalizeReviewDate_(get(r, 'posted_at'));
     const ratingNum   = Number(String(get(r, 'rating')).replace(/[^\d.]/g, ''));
-    const reviewId    = get(r, 'review_id') || `csv_${orderNumber}_${postedAt.replace(/[^\d]/g, '')}`;
+    const reviewType  = get(r, 'review_type');
+    const reviewId    = buildReviewId_(get(r, 'review_id'), get(r, 'review_url'), reviewType, orderNumber, postedAt);
+    const title       = get(r, 'title');
+    const bodyText    = (title ? `【${title}】\n` : '') + get(r, 'body');
     return {
       review_id:    reviewId,
       order_number: orderNumber,
@@ -105,7 +126,7 @@ function importReviewsFromCsv_(tenantId, csvText, preview) {
       item_code:    get(r, 'item_code'),
       rating:       isNaN(ratingNum) ? 0 : ratingNum,
       posted_at:    postedAt,
-      body:         get(r, 'body').substring(0, 5000),
+      body:         bodyText.substring(0, 5000),
     };
   }).filter(x => x.order_number);
 

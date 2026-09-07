@@ -31,6 +31,7 @@ function runPipeline() {
         }
       });
       sendPendingMails(tenant.tenant_id);
+      try { sendPendingReviewThanks(tenant.tenant_id); } catch(e) { Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`); }
       Logger.log(`[${tenant.tenant_id}] pipeline done`);
     } catch(e) {
       Logger.log(`[${tenant.tenant_id}] pipeline error: ${e.message}`);
@@ -54,6 +55,13 @@ function runHourlyFollowPipeline() {
       fetchOrders(tenant.tenant_id);
       linkOrdersReviews(tenant.tenant_id);
       sendPendingMails(tenant.tenant_id);
+      // レビューお礼メール（クーポン無し）。フォローメールを巻き込まないよう独立して try/catch する
+      try {
+        sendPendingReviewThanks(tenant.tenant_id);
+      } catch(e) {
+        Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`);
+        notifyAdmin_(`[step-samurai] ${tenant.tenant_id} レビューお礼メールエラー: ${e.message}`);
+      }
       Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline done`);
     } catch(e) {
       Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline error: ${e.message}`);

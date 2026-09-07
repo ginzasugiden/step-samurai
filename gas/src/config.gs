@@ -220,7 +220,7 @@ function getTenantTemplateRaw_(tenantId, templateId) {
   return tpl;
 }
 
-const KNOWN_TEMPLATE_IDS_ = ['follow_v1', 'coupon_v1'];
+const KNOWN_TEMPLATE_IDS_ = ['follow_v1', 'coupon_v1', 'review_thanks_v1'];
 
 /**
  * templates タブの1行を更新する（WebAPI update_template から呼ばれる）。
@@ -309,6 +309,54 @@ const COUPON_V1_BODY_DEFAULT_ =
 ---
 {{shop_signature}}`;
 
+const REVIEW_THANKS_V1_SUBJECT_DEFAULT_ = '【{{shop_name}}】レビューご投稿ありがとうございます';
+
+const REVIEW_THANKS_V1_BODY_DEFAULT_ =
+`{{buyer_name}} 様
+
+このたびはレビューをご投稿いただき、誠にありがとうございます。
+お花は生きものですので、お手元に届いたあとのご感想をお聞かせいただけることが
+私どもにとって何よりの励みであり、次の一輪をより良くするための道しるべになります。
+
+いただいたご感想はスタッフ全員で拝見し、商品づくり・お届けの改善に活かしてまいります。
+もしお花の傷みや配送についてお気づきの点がございましたら、
+お手数ですが下記までお知らせください。すぐに対応いたします。
+
+またのご利用を心よりお待ちしております。
+
+---
+{{shop_signature}}`;
+
+/** テンプレ初期値の一覧（templates タブに無い行だけを追記する ensureTenantTemplateRows_ が使う） */
+const TEMPLATE_DEFAULTS_ = () => ([
+  { template_id: 'follow_v1',        subject: FOLLOW_V1_SUBJECT_DEFAULT_,        body: FOLLOW_V1_BODY_DEFAULT_ },
+  { template_id: 'coupon_v1',        subject: COUPON_V1_SUBJECT_DEFAULT_,        body: COUPON_V1_BODY_DEFAULT_ },
+  { template_id: 'review_thanks_v1', subject: REVIEW_THANKS_V1_SUBJECT_DEFAULT_, body: REVIEW_THANKS_V1_BODY_DEFAULT_ },
+]);
+
+/**
+ * templates タブに無い template_id の行を既定文面で追記する（冪等・既存行は一切触らない）。
+ * 戻り値: 追加した template_id 配列。templates タブ自体が無ければ []（setupTenantConfigSheets_ を先に）。
+ */
+function ensureTenantTemplateRows_(tenantId) {
+  const ss    = getTenantSpreadsheet(tenantId);
+  const sheet = ss.getSheetByName('templates');
+  if (!sheet) return [];
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const idIdx  = header.indexOf('template_id');
+  const existing = new Set(data.slice(1).map(r => String(r[idIdx] || '')));
+  const now   = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  const added = [];
+  TEMPLATE_DEFAULTS_().forEach(def => {
+    if (existing.has(def.template_id)) return;
+    sheet.appendRow([def.template_id, def.subject, def.body, now]);
+    added.push(def.template_id);
+  });
+  if (added.length) invalidateTenantConfigCache_(tenantId);
+  return added;
+}
+
 /**
  * テナントの settings / templates タブを新設する（初回セットアップ用・手動実行）。
  * 既に存在する場合はスキップする（既存データを壊さない）。
@@ -351,6 +399,7 @@ function setupTenantConfigSheets_(tenantId) {
     Logger.log(`[${tenantId}] templates タブは既に存在します（作成スキップ）`);
   }
 
+  result.templateRowsAdded = ensureTenantTemplateRows_(tenantId);
   result.settingsKeysAdded = ensureTenantSettingsKeys_(tenantId);
   invalidateTenantConfigCache_(tenantId);
   Logger.log(`setupTenantConfigSheets_ 完了: ${JSON.stringify(result)}`);
@@ -434,7 +483,22 @@ const TENANT_SETTING_DEFS_ = [
     defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('EXCLUDE_ORDERS') || '') : '' },
   { key: 'shop_signature_override', value: '', description: 'メール署名を上書きする場合に記入（空なら店舗名＋問い合わせURLを自動生成）', editable: 'TRUE',
     defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('SHOP_SIGNATURE__OVERRIDE') || '') : '' },
+  { key: 'review_thanks_since', value: '', description: 'レビューお礼メールの対象とするレビュー投稿日の下限(yyyy-MM-dd)。未設定なら送らない（過去レビューへの一斉送信を防ぐ）', editable: 'FALSE' },
+  { key: 'review_thanks_min_rating', value: '3', description: 'レビューお礼メールを自動送信する最低評価（星）。これ未満の低評価は自動送信せずログに残す（個別対応推奨）', editable: 'TRUE' },
 ];
+
+/** レビューお礼メールの対象下限日 'yyyy-MM-dd'。未設定/不正なら null（呼び出し側で全スキップ＝fail-closed） */
+function getReviewThanksSince_(tenantId) {
+  const raw = getTenantSettingValue_(tenantId, 'review_thanks_since');
+  return raw ? toJstDateString_(raw) : null;
+}
+
+/** レビューお礼メールの最低評価。未設定/不正なら 3 */
+function getReviewThanksMinRating_(tenantId) {
+  const raw = getTenantSettingValue_(tenantId, 'review_thanks_min_rating');
+  const n = Number(raw);
+  return (raw === null || raw === '' || isNaN(n)) ? 3 : n;
+}
 
 /**
  * settings タブに無いキーを既定値で追記する（冪等・既存行は触らない）。戻り値: 追加したキー配列。

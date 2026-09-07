@@ -115,10 +115,12 @@ function buildReviewUrl_(orderNumber) {
 // =========================================================
 // クーポンメール
 // =========================================================
-function sendCouponMail(tenantId, order, coupon) {
+// opts.recordType: sends に記録する type（既定 'coupon'。検証時は 'coupon_test' を渡すと本番の重複判定を汚さない）
+function sendCouponMail(tenantId, order, coupon, opts) {
+  const recordType = (opts && opts.recordType) || 'coupon';
   const ss    = getTenantSpreadsheet(tenantId);
   const sends = ss.getSheetByName('sends');
-  if (alreadySent_(sends, order.order_number, 'coupon')) return;
+  if (alreadySent_(sends, order.order_number, recordType)) return;
 
   const creds = getRmsCredentials(tenantId);
   const tpl   = getTenantTemplateRaw_(tenantId, 'coupon_v1');
@@ -144,9 +146,9 @@ function sendCouponMail(tenantId, order, coupon) {
       creds.from_email, creds.from_name,
       subject, body, '', creds.reply_to, creds.cc_email
     );
-    recordSend_(sends, order.order_number, order.buyer_key, 'coupon', 'coupon_v1', 'sent');
+    recordSend_(sends, order.order_number, order.buyer_key, recordType, 'coupon_v1', 'sent');
   } catch(e) {
-    recordSend_(sends, order.order_number, order.buyer_key, 'coupon', 'coupon_v1', `error: ${e.message}`);
+    recordSend_(sends, order.order_number, order.buyer_key, recordType, 'coupon_v1', `error: ${e.message}`);
     throw e;
   }
   return result;

@@ -485,6 +485,7 @@ const TENANT_SETTING_DEFS_ = [
     defaultFor: t => t === LEGACY_GLOBAL_FALLBACK_TENANT_ ? (PropertiesService.getScriptProperties().getProperty('SHOP_SIGNATURE__OVERRIDE') || '') : '' },
   { key: 'review_thanks_since', value: '', description: 'レビューお礼メールの対象とするレビュー投稿日の下限(yyyy-MM-dd)。未設定なら送らない（過去レビューへの一斉送信を防ぐ）', editable: 'FALSE' },
   { key: 'review_thanks_min_rating', value: '3', description: 'レビューお礼メールを自動送信する最低評価（星）。これ未満の低評価は自動送信せずログに残す（個別対応推奨）', editable: 'TRUE' },
+  { key: 'review_ingest_enabled', value: 'false', description: 'ECOS からのレビュー自動取込（Webhook ingest_reviews）を受け付けるか。false の間は受信を拒否する（fail-closed）', editable: 'FALSE' },
 ];
 
 /** レビューお礼メールの対象下限日 'yyyy-MM-dd'。未設定/不正なら null（呼び出し側で全スキップ＝fail-closed） */

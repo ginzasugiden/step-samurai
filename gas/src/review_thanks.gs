@@ -27,10 +27,12 @@ function collectReviewsByOrder_(tenantId) {
   if (data.length < 2) return {};
   const header = data[0].map(String);
   const idx    = col => header.indexOf(col);
+  const deletedIdx = idx('deleted_at'); // Webhook取込(reviews_ingest.gs)が付ける列。無ければ従来どおり全件対象
   const map    = {};
   data.slice(1).forEach(row => {
     const orderNumber = String(row[idx('order_number')] || '').trim();
     if (!orderNumber) return;
+    if (deletedIdx >= 0 && String(row[deletedIdx] || '').trim() !== '') return; // 削除済みレビューにはお礼を送らない
     const postedAt = toJstDateString_(row[idx('posted_at')]) || '';
     const rating   = Number(row[idx('rating')]);
     const cur = map[orderNumber];

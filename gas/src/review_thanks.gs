@@ -163,6 +163,7 @@ function collectPendingReviewThanks_(tenantId) {
 
 /** 毎時バッチ用: 未送信のレビューお礼メールを全件処理 */
 function sendPendingReviewThanks(tenantId) {
+  if (!billingAllows_(tenantId)) return 0;   // 課金ガード（拒否理由は billingAllows_ がログ）
   const pending = collectPendingReviewThanks_(tenantId);
   Logger.log(`[${tenantId}] review_thanks: 対象 ${pending.targets.length}件 / skipped=${JSON.stringify(Object.keys(pending.skipped).reduce((o, k) => { o[k] = pending.skipped[k].length; return o; }, {}))}`);
   pending.targets.forEach(order => {

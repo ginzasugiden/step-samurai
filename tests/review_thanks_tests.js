@@ -26,7 +26,8 @@ class Sheet {
 }
 class SS { constructor(sheets) { this.sheets = sheets; } getSheetByName(n) { return this.sheets[n] || null; } insertSheet(n) { return (this.sheets[n] = new Sheet([])); } getSpreadsheetTimeZone() { return 'Asia/Tokyo'; } }
 
-const master = new Sheet([['tenant_id','shop_name','spreadsheet_id','status','shop_email','cc_email'], ['tokyoflower','東京フラワー','SS_TF','active','info@tokyoflower.jp','']]);
+const master = new Sheet([['tenant_id','shop_name','spreadsheet_id','status','shop_email','cc_email','plan','billing_provider','billing_status','trial_start','trial_end','fincode_customer_id','fincode_subscription_id','billing_updated_at','billing_note'],
+  ['tokyoflower','東京フラワー','SS_TF','active','info@tokyoflower.jp','','standard','manual','active','','','','','','']]);
 const settings = new Sheet([['key','value','description','editable_by_tenant'],
   ['follow_days_after_ship','5','','TRUE'], ['go_live_date','2026-08-22','','FALSE'], ['dry_run','false','','FALSE'], ['exclude_orders','','','FALSE']]);
 const templates = new Sheet([['template_id','subject','body','updated_at']]);
@@ -44,7 +45,7 @@ const SpreadsheetApp = { openById: id => { if (!books[id]) throw new Error('no b
 
 const ctx = { PropertiesService, CacheService, Utilities, Logger, SpreadsheetApp, console, isDryRun_: () => props.DRY_RUN === 'true' };
 vm.createContext(ctx);
-['tenant.gs', 'config.gs', 'reviews_import.gs', 'mailer.gs', 'review_thanks.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
+['tenant.gs', 'config.gs', 'billing.gs', 'reviews_import.gs', 'mailer.gs', 'review_thanks.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 const rapi = load('rakuten_api.gs'); const li = rapi.indexOf('function linkOrdersReviews('); vm.runInContext(rapi.substring(li, rapi.indexOf('\n}\n', li) + 3), ctx);
 // 外部依存をスタブ
 const sentMails = [];

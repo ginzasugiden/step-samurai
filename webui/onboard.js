@@ -47,6 +47,17 @@ $('check-btn').addEventListener('click', async () => {
   } catch (e) { $('check-result').textContent = '通信エラー: ' + e.message; }
 });
 
+// 決済案内: fincode_payment_url があればリンク、無ければ請求書払い案内。https の URL のみリンク化する
+function renderBillingGuide(b) {
+  const box = $('billing-guide'); box.textContent = '';
+  const trial = document.createElement('p'); trial.textContent = b.trial_end ? `無料トライアルは ${b.trial_end} までです。` : '無料トライアル期間は最大30日です。'; box.appendChild(trial);
+  const pay = document.createElement('p');
+  if (/^https:\/\//.test(String(b.payment_url || ''))) {
+    pay.append('お支払い（クレジットカード）: '); const a = document.createElement('a'); a.href = b.payment_url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'お支払い手続きへ'; pay.appendChild(a);
+  } else { pay.textContent = 'お支払い方法: 請求書払い（担当者よりご案内）'; }
+  box.appendChild(pay);
+}
+
 $('agree').addEventListener('change', () => { $('submit-btn').disabled = !$('agree').checked; });
 
 $('check-btn').addEventListener('click', () => { $('check-btn').classList.add('is-busy'); $('check-btn').disabled = true; setTimeout(() => { $('check-btn').classList.remove('is-busy'); $('check-btn').disabled = false; }, 1500); });
@@ -67,6 +78,7 @@ $('submit-btn').addEventListener('click', async () => {
     }
     keys.forEach(k => { $(k).value = ''; }); $('login_password').value = ''; $('login_password2').value = '';
     $('step2').hidden = true; $('step3').hidden = false; $('token-box').textContent = r.token; $('done-tenant-id').textContent = r.tenant_id;
+    renderBillingGuide(r.billing || {});
   } catch (e) { $('submit-result').textContent = '通信エラー: ' + e.message; $('submit-btn').disabled = false; }
   finally { $('submit-btn').classList.remove('is-busy'); hideOverlay(); }
 });

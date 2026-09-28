@@ -38,7 +38,7 @@
     <section class="card">
       <h2>テナント一覧</h2>
       <div class="table-wrap"><table id="tenant-table"><thead>
-        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>RMSキー</th><th>SMTP</th><th>稼働開始日</th><th>dry_run</th><th>PW</th><th>トークン</th><th>遡及</th><th></th></tr>
+        <tr><th>tenant_id</th><th>店舗名</th><th>状態</th><th>RMSキー</th><th>SMTP</th><th>稼働開始日</th><th>dry_run</th><th>PW</th><th>トークン</th><th>遡及</th><th>plan</th><th>課金方式</th><th>課金状態</th><th>trial終了</th><th></th></tr>
       </thead><tbody></tbody></table></div>
     </section>
 
@@ -101,6 +101,15 @@
           <div><h3>状態変更</h3>
             <select id="status-select"><option value="setup">setup</option><option value="paused">paused</option><option value="active">active</option><option value="disabled">disabled</option></select>
             <button id="status-btn">変更</button><pre id="status-result" class="result-box" hidden></pre></div>
+          <div><h3>課金（manual 運用）</h3>
+            <select id="bill-status"><option value="">（状態は変更しない）</option><option value="trial">trial</option><option value="active">active</option><option value="past_due">past_due</option><option value="canceled">canceled</option></select>
+            <select id="bill-provider"><option value="">（方式は変更しない）</option><option value="manual">manual</option><option value="fincode">fincode</option></select>
+            <input id="bill-note" type="text" placeholder="billing_note（任意・追記されます）" autocomplete="off">
+            <label class="hint"><input id="bill-freee" type="checkbox"> freeeで請求済（日付と請求書番号をメモに残すだけ・freee連携なし）</label>
+            <input id="bill-freee-date" type="date"> <input id="bill-freee-no" type="text" placeholder="freee 請求書番号" autocomplete="off">
+            <button id="bill-btn">課金情報を更新</button>
+            <pre id="bill-result" class="result-box" hidden></pre>
+            <p class="hint">変更は billing_events に手動記録されます。past_due / canceled / trial期限切れ / 未設定のテナントは、毎時パイプライン・お礼メール・クーポン発行がスキップされます。</p></div>
           <div><h3>SMTPブリッジ設定</h3><button id="bridge-btn" class="secondary">config.php 追記内容を表示</button><pre id="bridge-result" class="result-box" hidden></pre></div>
           <div><h3>その他</h3><button id="setup-sheets-btn" class="secondary">settings/templates 補完</button> <button id="columns-btn" class="secondary">分析列を追加</button><pre id="misc-result" class="result-box" hidden></pre></div>
         </div>

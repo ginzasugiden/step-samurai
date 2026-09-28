@@ -37,6 +37,7 @@ function doPost(e) {
       const s = loginWithPassword_(String(p.tenant_id || '').trim().toLowerCase(), String(p.password || ''));
       return jsonResponse_(s ? { ok: true, token: s.token, expires_at: s.expires_at, tenant_id: s.tenant_id, shop_name: s.shop_name } : { ok: false, error: 'unauthorized' });
     }
+    if (action === 'fincode_webhook') return jsonResponse_(handleFincodeWebhook_(req.payload || {})); // lolipop/fincode_webhook.php 経由（BRIDGE_TOKEN 認証・未設定なら拒否）
     if (action === 'ingest_reviews') return jsonResponse_(handleIngestReviews_(req.payload || {})); // ECOS Webhook（専用キー認証。テナントトークン不要）
     if (action === 'onboard_check')  return jsonResponse_(onboardCheck_(req.payload || {}));   // 招待コードで認証（onboarding.gs）
     if (action === 'onboard_submit') return jsonResponse_(onboardSubmit_(req.payload || {}));

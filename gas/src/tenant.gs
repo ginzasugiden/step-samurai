@@ -141,12 +141,14 @@ function getRmsCredentials(tenantId) {
   const sec = getTenantSecret_(tenantId, 'rms');
   if (sec) {
     serviceSecret = sec.secret.service_secret; licenseKey = sec.secret.license_key;
-    expiry = sec.meta.expiry || ''; sid = sec.meta.sid || ''; sname = sec.meta.sname || (master ? master.get('shop_name') : '');
+    expiry = sec.meta.expiry || ''; sid = sec.meta.sid || sec.secret.sid || ''; sname = sec.meta.sname || (master ? master.get('shop_name') : '');
   } else {
     const api = getApiKeyRow_(tenantId);
     serviceSecret = decodeApiValue_(api.get('serviceSecret')); licenseKey = decodeApiValue_(api.get('licenseKey'));
     expiry = api.get('expiry'); sid = api.get('sid'); sname = api.get('sname');
   }
+  // sid が空でも署名の問い合わせURLが壊れないよう、meta → secret → api_key → 注文番号の順で解決する
+  sid = resolveTenantSid_(tenantId, sid);
 
   // 差出人：マスターシート shop_email（必須）
   const shopEmail = master ? master.get('shop_email') : '';
@@ -166,9 +168,31 @@ function getRmsCredentials(tenantId) {
     from_name:      sname,
     reply_to:       shopEmail,
     cc_email:       ccEmail,
-    inquiry_url:    `https://inquiry.my.rakuten.co.jp/shop/${sid}`,
+    inquiry_url:    sid ? `https://inquiry.my.rakuten.co.jp/shop/${sid}` : '',
     shop_signature: buildSignature_(sname, sid, tenantId),
   };
+}
+
+/**
+ * 楽天店舗ID(sid) の解決。primary（tenant_secrets / api_key 由来）が数字4桁以上ならそれを使い、
+ * 空・不正ならテナントの orders タブの注文番号（<sid>-yyyyMMdd-xxxxxxxxxx）先頭から導出する。
+ * 導出できなければ空文字（呼び出し側で署名URLを省略）。読み取りのみ。
+ */
+function resolveTenantSid_(tenantId, primary) {
+  const v = String(primary === undefined || primary === null ? '' : primary).trim();
+  if (/^\d{4,}$/.test(v)) return v;
+  try {
+    const sheet = getTenantSpreadsheet(tenantId).getSheetByName('orders');
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      const c = data.length ? data[0].indexOf('order_number') : -1;
+      for (let i = 1; i < data.length && c >= 0; i++) {
+        const m = /^(\d{4,})-\d{8}-\d+$/.exec(String(data[i][c] || ''));
+        if (m) return m[1];
+      }
+    }
+  } catch (e) { Logger.log(`resolveTenantSid_ skip [${tenantId}]: ${e.message}`); }
+  return '';
 }
 
 function buildSignature_(sname, sid, tenantId) {
@@ -221,6 +245,9 @@ function createTenant(shopName, tenantId, shopEmail, ccEmail) {
     shopEmail || '', ccEmail || ''
   ]);
   _masterRowsCache = null;
+
+  // 新規テナントは billing_status=trial（作成日〜作成日+trial_days）で開始
+  initTrialBilling_(tenantId);
 
   // settings / templates タブと運用ガード設定（dry_run=true, go_live_date 空 = 送らない）を投入
   setupTenantConfigSheets_(tenantId);

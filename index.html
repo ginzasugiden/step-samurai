@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ステップ侍 — 楽天店舗のフォローメール自動化</title>
+<meta name="description" content="楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを自動で送る。月額9,800円・初期費用0円・最大30日無料。">
+<style>
+:root { --bg:#fbfaf7; --surface:#ffffff; --text:#1d1f23; --muted:#5f6670; --line:#e4e1d8; --accent:#b3261e; --accent-ink:#ffffff; --ok:#1f7a4d; --soon:#8a6d00; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17181b; --surface:#212327; --text:#f0eee9; --muted:#a4a9b2; --line:#33363c; --accent:#e5584f; --accent-ink:#17181b; --ok:#5fc58f; --soon:#e0c25a; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; line-height:1.75; }
+.wrap { max-width:920px; margin:0 auto; padding:0 16px; }
+header.top { border-bottom:1px solid var(--line); }
+header.top .wrap { display:flex; align-items:center; justify-content:space-between; height:56px; }
+.brand { font-weight:700; letter-spacing:.04em; }
+a { color:var(--accent); }
+.btn { display:inline-block; padding:.7rem 1.4rem; border-radius:8px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:700; }
+.btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+.hero { padding:56px 0 40px; }
+.hero h1 { font-size:clamp(1.7rem,5vw,2.6rem); line-height:1.3; margin:0 0 16px; }
+.hero p { color:var(--muted); max-width:36em; margin:0 0 24px; }
+.cta { display:flex; gap:12px; flex-wrap:wrap; }
+section { padding:32px 0; border-top:1px solid var(--line); }
+h2 { font-size:1.35rem; margin:0 0 16px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; }
+.card h3 { margin:0 0 8px; font-size:1.05rem; }
+.card p { margin:0; color:var(--muted); font-size:.95rem; }
+.tag { display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:99px; border:1px solid currentColor; margin-left:6px; vertical-align:middle; }
+.tag.soon { color:var(--soon); } .tag.ok { color:var(--ok); }
+.price { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+.price .n { font-size:2rem; font-weight:800; }
+.price .l { color:var(--muted); font-size:.9rem; }
+.note { color:var(--muted); font-size:.85rem; }
+ol.steps { padding-left:1.2rem; } ol.steps li { margin-bottom:8px; }
+form.invite { display:flex; gap:8px; flex-wrap:wrap; }
+form.invite input { flex:1 1 260px; padding:.7rem .8rem; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:1rem; }
+footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <span class="brand">ステップ侍</span>
+  <nav><a href="webui/admin.html" style="margin-right:16px">運営ログイン</a><a href="webui/index.html">店舗ログイン</a></nav>
+</div></header>
+
+<main>
+<div class="wrap">
+  <div class="hero">
+    <h1>発送後のひと手間を、<br>自動で丁寧に。</h1>
+    <p>楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを、店舗名義で自動送信します。お客様のログイン情報はお預かりしません。</p>
+    <div class="cta"><a class="btn" href="#apply">招待コードでお申し込み</a><a class="btn ghost" href="#features">機能を見る</a></div>
+  </div>
+
+  <section id="features">
+    <h2>機能</h2>
+    <div class="grid">
+      <div class="card"><h3>フォローメール<span class="tag ok">提供中</span></h3><p>発送から指定日数後に、店舗の差出人でご利用のお礼とレビューのお願いを送信。文面は管理画面から編集できます。</p></div>
+      <div class="card"><h3>レビューお礼メール<span class="tag ok">提供中</span></h3><p>レビューが投稿された注文へ、お礼のメールを自動送信。低評価は自動送信せず、個別対応の判断材料として残します。</p></div>
+      <div class="card"><h3>店舗分析<span class="tag ok">提供中</span></h3><p>受注・リピート・レビュー率などを店舗専用の画面で確認できます。</p></div>
+      <div class="card"><h3>クーポン発行機能<span class="tag soon">準備中</span></h3><p>レビュー投稿特典などのクーポン自動発行は現在準備中です。提供開始はあらためてご案内します。</p></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <h2>料金</h2>
+    <div class="price">
+      <div class="card"><div class="n">9,800円</div><div class="l">月額</div></div>
+      <div class="card"><div class="n">0円</div><div class="l">初期費用</div></div>
+      <div class="card"><div class="n">最大30日</div><div class="l">無料トライアル</div></div>
+    </div>
+    <p class="note">※ 表示金額・無料期間は運営設定（plan_price_monthly / setup_fee / trial_days）と同期して運用します。無料期間の上限は30日です。お支払いは請求書払い（担当者よりご案内）です。クレジットカード決済は準備中です。</p>
+  </section>
+
+  <section id="flow">
+    <h2>導入の流れ</h2>
+    <ol class="steps">
+      <li>運営から招待コードを受け取ります。</li>
+      <li>お申し込みページで、店舗情報・RMSキー・あんしんメルアドSMTPを入力（暗号化して保存されます）。</li>
+      <li>楽天への接続テストに成功すると登録完了。無料トライアルが始まります。</li>
+      <li>運営が内容を確認し、稼働開始日に合わせて送信を開始します。</li>
+    </ol>
+    <p class="note">準備物・制約は担当者よりご案内します（RMS の受注API利用申請、あんしんメルアドSMTP の発行が必要です）。</p>
+  </section>
+
+  <section id="apply">
+    <h2>お申し込み</h2>
+    <p>招待コードをお持ちの方は、こちらから登録へ進めます。</p>
+    <form class="invite" id="invite-form">
+      <input id="invite" type="text" placeholder="招待コード" autocomplete="off" aria-label="招待コード">
+      <button class="btn" type="submit">登録へ進む</button>
+    </form>
+    <p class="note">招待コードは運営者が発行します（有効7日・一回限り）。コードはURLのフラグメント(#)で渡すため、サーバには送信されません。</p>
+  </section>
+</div>
+</main>
+
+<footer><div class="wrap">ステップ侍 ／ 運営: 銀座杉伝　<a href="webui/admin.html">運営ログイン</a></div></footer>
+
+<script>
+document.getElementById('invite-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var code = document.getElementById('invite').value.trim();
+  location.href = 'webui/onboard.html' + (code ? '#invite=' + encodeURIComponent(code) : '');
+});
+</script>
+</body>
+</html>

@@ -85,7 +85,9 @@ function renderTenants() {
     const cells = [t.tenant_id, t.shop_name, `<span class="badge ${esc(t.status)}">${esc(t.status)}</span>`,
       t.has_credentials ? `<span class="ok">${t.credentials_source === 'self' ? '店舗登録' : (t.credentials_source === 'legacy' ? 'シート' : '運営登録')}</span> 期限 ${esc(String(t.credentials_expiry || '').slice(0, 10) || '-')}` : '<span class="ng">なし</span>',
       t.has_smtp ? '<span class="ok">店舗登録</span>' : (t.tenant_id === 'tokyoflower' ? 'config.php' : '<span class="ng">なし</span>'),
-      esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), t.has_password ? '<span class="ok">設定済</span>' : '<span class="ng">未設定</span>', `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-'];
+      esc(t.settings.go_live_date || '<span class="ng">未設定</span>'), esc(t.settings.dry_run ?? '-'), t.has_password ? '<span class="ok">設定済</span>' : '<span class="ng">未設定</span>', `${t.active_tokens}件`, t.backfill_cursor ? `実行中 ${esc(t.backfill_cursor)}` : '-',
+      ...(() => { const b = t.billing || {}; const cls = b.billing_status === 'active' || b.billing_status === 'trial' ? 'ok' : 'ng';
+        return [esc(b.plan || '-'), esc(b.billing_provider || '-'), b.billing_status ? `<span class="${cls}">${esc(b.billing_status)}</span>` : '<span class="ng">未設定</span>', esc(b.trial_end || '-')]; })()];
     cells.forEach(c => { const td = document.createElement('td'); td.innerHTML = c; tr.appendChild(td); });
     const td = document.createElement('td'); const b = document.createElement('button'); b.textContent = '開く'; b.className = 'secondary';
     b.addEventListener('click', () => selectTenant(t.tenant_id)); td.appendChild(b); tr.appendChild(td);
@@ -126,7 +128,7 @@ async function selectTenant(id) {
   state.current = t; $('detail-id').textContent = `${t.tenant_id}（${t.shop_name}）`; $('detail-card').hidden = false;
   $('status-select').value = t.status;
   if (switched) {
-    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result'].forEach(i => { $(i).hidden = true; });
+    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result'].forEach(i => { $(i).hidden = true; });
     document.querySelector('#probe-table tbody').innerHTML = '';
   }
   renderChecklist(t);
@@ -182,7 +184,7 @@ const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventList
     if (action === 'issue_tenant_token' && r.ok) showToken(resultId, r.token);
     else if (action === 'reset_password' && r.ok) showToken(resultId, r.password);
     else show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r);
-    if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp'].includes(action)) await reloadTenants();
+    if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp', 'set_billing'].includes(action)) await reloadTenants();
   }
   catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
 });
@@ -194,6 +196,9 @@ op('backfill-reset-btn', 'backfill_reset', 'backfill-result', null, '遡及取�
 op('token-btn', 'issue_tenant_token', 'token-result', null, '新しい店舗トークンを発行します（既存のトークンはそのまま有効）。');
 op('revoke-btn', 'revoke_tenant_token', 'token-result', null, 'この店舗の有効トークンをすべて失効させます。店舗は再ログインできなくなります。');
 op('status-btn', 'set_tenant_status', 'status-result', () => ({ status: $('status-select').value }), 'テナントの状態を変更します。active にすると毎時パイプラインの対象になります。');
+op('bill-btn', 'set_billing', 'bill-result', () => ({ billing_status: $('bill-status').value, billing_provider: $('bill-provider').value, billing_note: $('bill-note').value.trim(),
+  freee_invoiced: $('bill-freee').checked, freee_date: $('bill-freee-date').value, freee_invoice_no: $('bill-freee-no').value.trim() }), '課金情報を更新します。past_due / canceled にすると、この店舗の送信・クーポン発行が止まります。');
+$('bill-btn').addEventListener('click', () => setTimeout(reloadTenants, 1500));
 op('bridge-btn', 'bridge_config_hint', 'bridge-result');
 op('set-cred-btn', 'set_credentials', 'cred-result', () => ({ service_secret: $('set-secret').value.trim(), license_key: $('set-license').value.trim(), license_expiry: $('set-expiry').value }), 'RMS へ接続テストを行い、成功した場合のみ暗号化保存します。');
 op('set-smtp-btn', 'set_smtp', 'cred-result', () => ({ smtp_user: $('set-smtp-user').value.trim(), smtp_pass: $('set-smtp-pass').value }));

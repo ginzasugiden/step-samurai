@@ -21,6 +21,7 @@ const ADMIN_ACTIONS_ = [
   'check_credentials', 'probe_tenant', 'ensure_columns',
   'backfill_start', 'backfill_status', 'backfill_reset',
   'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp', 'reset_password',
+  'set_billing', 'ensure_billing_schema',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -55,6 +56,8 @@ function handleAdminAction_(req) {
       case 'create_invite':       return jsonResponse_(adminCreateInvite_(payload));
       case 'set_credentials':     return withTenant_(tenantId, () => updateCredentials_(tenantId, payload)); // 接続テスト成功時のみ暗号化保存（onboarding.gs）
       case 'set_smtp':            return withTenant_(tenantId, () => updateSmtp_(tenantId, payload));
+      case 'set_billing':         return withTenant_(tenantId, () => adminSetBilling_(tenantId, payload));
+      case 'ensure_billing_schema': return jsonResponse_({ ok: true, result: ensureBillingSchema_() });
       case 'reset_password':      return withTenant_(tenantId, () => ({ ok: true, tenant_id: tenantId, password: setTenantPassword_(tenantId, String(payload.password || '') || null) }));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });
     }
@@ -98,6 +101,7 @@ function adminListTenants_() {
       } catch (e) { /* api_key 行なし */ }
     }
     out.has_smtp = !!getTenantSecretMeta_(t.tenant_id, 'smtp');
+    try { const b = readBillingRow_(t.tenant_id); out.billing = b ? { plan: b.plan, billing_provider: b.billing_provider, billing_status: b.billing_status, trial_end: b.trial_end, billing_note: b.billing_note } : null; } catch (e) { out.billing = null; }
     if (t.status !== 'disabled') {
       try {
         ['go_live_date', 'dry_run', 'follow_days_after_ship'].forEach(k => { const v = getTenantSettingValue_(t.tenant_id, k); out.settings[k] = (k === 'go_live_date' && v) ? toJstDateString_(v) : v; });
@@ -138,6 +142,7 @@ function activationBlockers_(tenantId) {
   if (!t || !t.shop_email) blockers.push('マスターシートの shop_email が未設定');
   if (!getTenantGoLiveDate_(tenantId)) blockers.push('settings.go_live_date が未設定');
   if (getFollowDaysAfterShip_(tenantId) === null) blockers.push('settings.follow_days_after_ship が未設定/不正');
+  if (!billingDecision_(tenantId).allowed) blockers.push('課金ステータスが稼働可ではない（trial期間内 または active が必要）');
   if (!getTenantTemplateRaw_(tenantId, 'follow_v1')) blockers.push('templates.follow_v1 が無い');
   return blockers;
 }

@@ -11,6 +11,7 @@ function debugGetOrderRawTestOrder() {
 function runPipeline() {
   const tenants = listActiveTenants();
   tenants.forEach(tenant => {
+    if (!billingAllows_(tenant.tenant_id)) return;   // 課金ガード（クーポン発行を含む全経路をスキップ）
     try {
       Logger.log(`[${tenant.tenant_id}] pipeline start`);
       fetchOrders(tenant.tenant_id);
@@ -50,6 +51,7 @@ function runPipeline() {
 function runHourlyFollowPipeline() {
   const tenants = listActiveTenants();
   tenants.forEach(tenant => {
+    if (!billingAllows_(tenant.tenant_id)) return;   // 課金ガード
     try {
       Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline start`);
       fetchOrders(tenant.tenant_id);
@@ -274,6 +276,18 @@ function debugSafetyCheck() {
 
 function issueTokenTokyoflower() {
   Logger.log(issueTenantToken_('tokyoflower'));
+}
+
+/**
+ * 署名の問い合わせURLに sid が入るかの確認（読み取り専用・sends 等へは書かない）。
+ * shop_signature_override を無視した経路（buildSignature_ の自動生成）で 240364 が含まれることを確認する。
+ */
+function testSignatureSidTokyoflower() {
+  const runId = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMddHHmmss');
+  const c = getRmsCredentials('tokyoflower');
+  const auto = buildSignature_(c.shop_name, c.sid, null);   // tenantId=null → override を参照しない自動生成
+  Logger.log(`test_signature_sid_${runId}: sid=${c.sid} inquiry_url=${c.inquiry_url} contains240364=${auto.indexOf('240364') >= 0}`);
+  return auto.indexOf('240364') >= 0;
 }
 
 function setupConfigSheetsTokyoflower() {

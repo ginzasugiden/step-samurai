@@ -83,7 +83,7 @@ function onboardSubmit_(payload) {
   if (!test.ok) return { ok: false, error: 'rms_auth_failed', http_code: test.http_code, rms_message: test.rms_message };
 
   // 暗号化保存
-  putTenantSecret_(tenantId, 'rms',  { service_secret: p('service_secret'), license_key: p('license_key') },
+  putTenantSecret_(tenantId, 'rms',  { service_secret: p('service_secret'), license_key: p('license_key'), sid: p('sid') },
                    { sid: p('sid'), sname: p('shop_name'), expiry: toJstDateString_(p('license_expiry')) || '' });
   putTenantSecret_(tenantId, 'smtp', { smtp_user: p('smtp_user'), smtp_pass: p('smtp_pass') },
                    { smtp_user_masked: maskUser_(p('smtp_user')) });
@@ -102,7 +102,9 @@ function onboardSubmit_(payload) {
   setTenantPassword_(tenantId, String(payload.login_password));
   const token = issueTenantToken_(tenantId);
   notifyAdmin_(`[step-samurai] 店舗 ${tenantId}（${p('shop_name')}）がセルフ登録を完了しました。admin.html で内容を確認し、遡及取得→稼働化へ進めてください。`);
-  return { ok: true, tenant_id: tenantId, token: token, rms_shop: test.rms_message || 'OK' };
+  let billing = {};
+  try { const b = readBillingRow_(tenantId); billing = { billing_status: b ? b.billing_status : '', trial_end: b ? b.trial_end : '', payment_url: getGlobalSetting_('fincode_payment_url', '') }; } catch (e) { /* 表示用のみ */ }
+  return { ok: true, tenant_id: tenantId, token: token, rms_shop: test.rms_message || 'OK', billing: billing };
 }
 
 /** 平文キーで RMS 認証を試す（保存前検証）。読み取りのみ */
@@ -156,7 +158,10 @@ function updateCredentials_(tenantId, payload) {
   if (!test.ok) return { ok: false, error: 'rms_auth_failed', http_code: test.http_code, rms_message: test.rms_message };
   const prev = getTenantSecretMeta_(tenantId, 'rms');
   const meta = Object.assign({}, prev ? prev.meta : {}, { expiry: toJstDateString_(exp) || (prev ? prev.meta.expiry : '') });
-  putTenantSecret_(tenantId, 'rms', { service_secret: ss, license_key: lk }, meta);
+  const prevSecret = getTenantSecret_(tenantId, 'rms');
+  const sidKeep = (prevSecret && (prevSecret.meta.sid || prevSecret.secret.sid)) || meta.sid || '';
+  if (sidKeep) meta.sid = sidKeep;   // 更新で sid を失わない
+  putTenantSecret_(tenantId, 'rms', { service_secret: ss, license_key: lk, sid: sidKeep }, meta);
   return { ok: true, expiry: meta.expiry };
 }
 

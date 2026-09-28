@@ -223,6 +223,12 @@ function seedBillingInitial() {
     appendBillingEvent_(t.tenant_id, 'manual', 'seed_canceled', '', 'canceled', 'initial seed (not in service)');
     out.canceled.push(t.tenant_id);
   });
+  // sid 根本修正: tokyoflower の tenant_secrets(rms) meta に sid が無ければ 240364 を追記（meta のみ・暗号文は不変・冪等）
+  const m = getTenantSecretMeta_('tokyoflower', 'rms');
+  if (!m) out.sid = 'no_rms_row';
+  else if (m.meta.sid) out.sid = 'already';
+  else { mergeTenantSecretMeta_('tokyoflower', 'rms', { sid: '240364' }); out.sid = 'set'; }
+  Logger.log(`billing: tokyoflower=active, ${out.canceled.length ? out.canceled.join(',') + '=canceled' : 'canceled=(変更なし)'} / sid: ${out.sid}`);
   Logger.log(`seedBillingInitial: ${JSON.stringify(out)}`);
   return out;
 }

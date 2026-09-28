@@ -108,6 +108,20 @@ function getTenantSecret_(tenantId, kind) {
   return null;
 }
 
+/** meta（非秘密の付随情報）だけを既存キー保持でマージ更新する。暗号文・updated_at は触らない。行が無ければ false */
+function mergeTenantSecretMeta_(tenantId, kind, patch) {
+  const sheet = getSecretsSheet_();
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === tenantId && String(data[i][1]) === kind) {
+      let meta = {}; try { meta = JSON.parse(String(data[i][4] || '{}')); } catch (e) {}
+      sheet.getRange(i + 1, 5).setValue(JSON.stringify(Object.assign({}, meta, patch)));
+      return true;
+    }
+  }
+  return false;
+}
+
 /** 復号せずに meta だけ返す（管理画面の一覧用） */
 function getTenantSecretMeta_(tenantId, kind) {
   const data = getSecretsSheet_().getDataRange().getValues();

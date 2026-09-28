@@ -28,7 +28,7 @@ const fixDate = c => vm.runInContext('var __today = "2026-09-29"; function billi
 const setToday = (c, d) => vm.runInContext(`__today = "${d}"`, c);
 
 const ctx = base(); vm.createContext(ctx);
-['tenant.gs', 'billing.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f })); fixDate(ctx);
+['crypto_store.gs', 'tenant.gs', 'billing.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f })); fixDate(ctx);
 
 let pass = 0; const t = (n, f) => { try { f(); pass++; console.log('  ok  ' + n); } catch (e) { console.log('  FAIL ' + n + '\n       ' + e.message); process.exitCode = 1; } };
 const events = () => books.MASTER.sheets.billing_events.rows.slice(1);
@@ -118,10 +118,18 @@ t('event_id 無しは拒否', () => assert.equal(ctx.handleFincodeWebhook_({ bri
 console.log('seedBillingInitial（初回リリース）');
 t('tokyoflower のみ許可・billing 未設定の他行（demo）は canceled/not in service で拒否。既設定行は不変', () => {
   master.rows.push(['demo', 'でも', 'S9', 'disabled', 'x@x.jp', '', '', '', '', '', '', '', '', '', '']);
+  books.MASTER.sheets.tenant_secrets = new Sheet([['tenant_id', 'kind', 'ciphertext', 'updated_at', 'meta_json'], ['tokyoflower', 'rms', 'CIPHERTEXT-UNTOUCHED', '2026-09-07 10:44:26', '{"expiry":"2026-12-01"}']]);
   const before = B('newshop').billing_status; const r = ctx.seedBillingInitial();
+  const sec = books.MASTER.sheets.tenant_secrets.rows[1];
+  assert.equal(r.sid, 'set'); assert.deepEqual(JSON.parse(sec[4]), { expiry: '2026-12-01', sid: '240364' }); assert.equal(sec[2], 'CIPHERTEXT-UNTOUCHED'); assert.equal(sec[3], '2026-09-07 10:44:26');
   assert.deepEqual(Array.from(r.canceled), ['demo']); assert.equal(B('demo').billing_status, 'canceled'); assert.equal(B('demo').billing_note, 'not in service');
   assert.equal(ctx.billingAllows_('demo'), false); assert.equal(ctx.billingAllows_('tokyoflower'), true); assert.equal(B('newshop').billing_status, before);
   assert.ok(events().some(e => e[2] === 'demo' && e[4] === 'seed_canceled'));
-  assert.deepEqual(Array.from(ctx.seedBillingInitial().canceled), []); });
+  const snap = JSON.stringify([master.rows, books.MASTER.sheets.tenant_secrets.rows]); const nEv = events().length;
+  const r2 = ctx.seedBillingInitial();   // 2回目: 何も変わらない
+  assert.deepEqual(Array.from(r2.canceled), []); assert.equal(r2.sid, 'already');
+  assert.equal(JSON.stringify([master.rows, books.MASTER.sheets.tenant_secrets.rows]).replace(/"20\d\d-\d\d-\d\d \d\d:\d\d:\d\d"/g, ''), snap.replace(/"20\d\d-\d\d-\d\d \d\d:\d\d:\d\d"/g, ''));
+  assert.equal(events().length, nEv);
+  assert.ok(logs.some(l => l.startsWith('billing: tokyoflower=active') && l.includes('sid: already'))); });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

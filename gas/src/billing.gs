@@ -205,6 +205,28 @@ function seedBillingActive_(tenantId) {
   return { ok: true };
 }
 
+/**
+ * 初回リリース用の一括シード（冪等・GAS エディタから1回実行）。
+ *  - tokyoflower: manual / active（seedBillingTokyoflower と同じ値）
+ *  - それ以外で billing_status が空の全行（demo 等）: canceled / billing_note="not in service"
+ *  既に billing_status がある行は変更しない。billing_events に手動シードを記録する。
+ */
+function seedBillingInitial() {
+  ensureBillingSchema_();
+  const out = { active: [], canceled: [] };
+  if (seedBillingActive_('tokyoflower').ok) out.active.push('tokyoflower');
+  listAllTenants_().forEach(t => {
+    if (t.tenant_id === 'tokyoflower') return;
+    const b = readBillingRow_(t.tenant_id);
+    if (!b || b.billing_status) return;
+    writeBillingFields_(t.tenant_id, { plan: b.plan || 'standard', billing_provider: 'manual', billing_status: 'canceled', billing_note: 'not in service' });
+    appendBillingEvent_(t.tenant_id, 'manual', 'seed_canceled', '', 'canceled', 'initial seed (not in service)');
+    out.canceled.push(t.tenant_id);
+  });
+  Logger.log(`seedBillingInitial: ${JSON.stringify(out)}`);
+  return out;
+}
+
 // ===== 日次チェック（トリガー登録は人間ゲート） =====
 
 /** trial_end 超過を検知して billing_note に「trial期限切れ」を記録する。ステータスは自動変更しない */

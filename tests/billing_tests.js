@@ -115,4 +115,13 @@ t('無関係イベント・未突合顧客は状態を変えない', () => {
   assert.equal(B('newshop').billing_status, 'active'); });
 t('event_id 無しは拒否', () => assert.equal(ctx.handleFincodeWebhook_({ bridge_token: 'BT', event_payload: {} }).error, 'event_id_required'));
 
+console.log('seedBillingInitial（初回リリース）');
+t('tokyoflower のみ許可・billing 未設定の他行（demo）は canceled/not in service で拒否。既設定行は不変', () => {
+  master.rows.push(['demo', 'でも', 'S9', 'disabled', 'x@x.jp', '', '', '', '', '', '', '', '', '', '']);
+  const before = B('newshop').billing_status; const r = ctx.seedBillingInitial();
+  assert.deepEqual(Array.from(r.canceled), ['demo']); assert.equal(B('demo').billing_status, 'canceled'); assert.equal(B('demo').billing_note, 'not in service');
+  assert.equal(ctx.billingAllows_('demo'), false); assert.equal(ctx.billingAllows_('tokyoflower'), true); assert.equal(B('newshop').billing_status, before);
+  assert.ok(events().some(e => e[2] === 'demo' && e[4] === 'seed_canceled'));
+  assert.deepEqual(Array.from(ctx.seedBillingInitial().canceled), []); });
+
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

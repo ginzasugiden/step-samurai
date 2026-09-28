@@ -325,10 +325,63 @@ function linkOrdersReviews(tenantId) {
   });
 }
 
+const COUPON_MIN_LEAD_MINUTES_ = 60;
+
+/**
+ * クーポン発行リクエストXMLの組み立てと検証（副作用なし）。
+ * 構造は公開モデル bububa/rakuten-go の coupon/issue.go（CouponToIssue）と照合済み。itemType=4（受注）固定。
+ * p: { name, caption, start(Date), end(Date), issueCount, discountType(1定額/2定率), discountFactor, memberAvailMaxCount, now(省略可) }
+ * 戻り値: { ok, xml, errors[] }
+ */
+function buildCouponIssueXml_(p) {
+  const errors = [];
+  const now = p.now || new Date();
+  const int = v => Number.isInteger(Number(v)) ? Number(v) : NaN;
+  if (!p.name)    errors.push('couponName は必須');
+  if (!p.caption) errors.push('couponCaption は必須');
+  if (!(p.start instanceof Date) || isNaN(p.start.getTime())) errors.push('couponStartDate が不正');
+  else if (p.start.getTime() < now.getTime() + COUPON_MIN_LEAD_MINUTES_ * 60 * 1000) errors.push(`couponStartDate は現在+${COUPON_MIN_LEAD_MINUTES_}分以上先にすること`);
+  if (!(p.end instanceof Date) || isNaN(p.end.getTime())) errors.push('couponEndDate が不正');
+  else if (p.start instanceof Date && p.end.getTime() <= p.start.getTime()) errors.push('couponEndDate は開始より後にすること');
+  if (!(int(p.issueCount) >= 1)) errors.push('issueCount は1以上の整数');
+  if (![1, 2].includes(int(p.discountType))) errors.push('discountType は 1（定額）か 2（定率）');
+  if (!(int(p.discountFactor) >= 1)) errors.push('discountFactor は1以上の整数');
+  if (int(p.discountType) === 2 && int(p.discountFactor) > 99) errors.push('定率の discountFactor は99以下');
+  if (!(int(p.memberAvailMaxCount) >= 0)) errors.push('memberAvailMaxCount は0以上の整数');
+  if (errors.length) return { ok: false, xml: '', errors: errors };
+
+  const fmt = d => Utilities.formatDate(d, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss'+09:00'");
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<request><couponIssueRequest><coupon>' +
+    `<couponName>${escapeXml_(p.name)}</couponName>` +
+    `<couponCaption>${escapeXml_(p.caption)}</couponCaption>` +
+    `<couponStartDate>${fmt(p.start)}</couponStartDate>` +
+    `<couponEndDate>${fmt(p.end)}</couponEndDate>` +
+    `<issueCount>${int(p.issueCount)}</issueCount>` +
+    '<itemType>4</itemType>' +
+    `<discountType>${int(p.discountType)}</discountType>` +
+    `<discountFactor>${int(p.discountFactor)}</discountFactor>` +
+    `<memberAvailMaxCount>${int(p.memberAvailMaxCount)}</memberAvailMaxCount>` +
+    '<purchaseHistoryCond><type>0</type></purchaseHistoryCond>' +
+    '<multiRankCond><rankCond>0</rankCond></multiRankCond>' +
+    '<ageRangeCond><lowerBound>0</lowerBound><upperBound>0</upperBound></ageRangeCond>' +
+    '<birthmonthCond>0</birthmonthCond>' +
+    '<multiPrefectureCond><prefectureCond>NONE</prefectureCond></multiPrefectureCond>' +
+    '<combineFlag>1</combineFlag>' +
+    '<displayFlag>0</displayFlag>' +
+    '</coupon></couponIssueRequest></request>';
+  return { ok: true, xml: xml, errors: [] };
+}
+
 // クーポン発行（楽天Coupon API v1 — XML形式）
 // エンドポイント: POST https://api.rms.rakuten.co.jp/es/1.0/coupon/issue
 // couponStartDate は最短60分後制約あり → 現在+65分で設定
 function issueCoupon(tenantId, target) {
+  // 課金ガード・クーポン有効化ゲート（いずれも fail-closed。未設定は発行しない）
+  if (!billingAllows_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: billing_not_allowed`); return null; }
+  if (!isTenantCouponEnabled_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: settings.coupon_enabled が true ではない（fail-closed）`); return null; }
+
   const ss    = getTenantSpreadsheet(tenantId);
   const sheet = ss.getSheetByName('coupons');
 
@@ -339,32 +392,22 @@ function issueCoupon(tenantId, target) {
   }
 
   const validDays = getCouponValidDays_(tenantId); // settings.coupon_valid_days（既定30日）
-  const fmt   = d => Utilities.formatDate(d, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss'+09:00'");
   const start = new Date(Date.now() + 65 * 60 * 1000);          // 現在+65分
   const end   = new Date(start.getTime() + validDays * 24 * 60 * 60 * 1000); // 開始+validDays日
 
-  const xml =
-    '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<request><couponIssueRequest><coupon>' +
-    `<couponName>${escapeXml_(rule.coupon_name)}</couponName>` +
-    '<couponCaption>レビュー投稿特典</couponCaption>' +
-    `<couponStartDate>${fmt(start)}</couponStartDate>` +
-    `<couponEndDate>${fmt(end)}</couponEndDate>` +
-    '<issueCount>100</issueCount>' +
-    '<itemType>4</itemType>' +
-    '<discountType>1</discountType>' +
-    `<discountFactor>${rule.discount}</discountFactor>` +
-    '<memberAvailMaxCount>0</memberAvailMaxCount>' +
-    '<purchaseHistoryCond><type>0</type></purchaseHistoryCond>' +
-    '<multiRankCond><rankCond>0</rankCond></multiRankCond>' +
-    '<ageRangeCond><lowerBound>0</lowerBound><upperBound>0</upperBound></ageRangeCond>' +
-    '<birthmonthCond>0</birthmonthCond>' +
-    '<multiPrefectureCond><prefectureCond>NONE</prefectureCond></multiPrefectureCond>' +
-    '<combineFlag>1</combineFlag>' +
-    '<displayFlag>0</displayFlag>' +
-    '</coupon></couponIssueRequest></request>';
+  const built = buildCouponIssueXml_({
+    name: rule.coupon_name, caption: 'レビュー投稿特典', start: start, end: end,
+    issueCount: 100, discountType: 1, discountFactor: rule.discount, memberAvailMaxCount: 0,
+  });
+  if (!built.ok) {
+    Logger.log(`issueCoupon FAILED [${tenantId}]: request validation: ${built.errors.join(' / ')}`);
+    sheet.appendRow(['', target.buyer_key, target.rule_id, Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
+      '', `ERROR: validation: ${built.errors.join(' / ').substring(0, 250)}`]);
+    return null;
+  }
+  const xml = built.xml;
 
-  const res  = UrlFetchApp.fetch('https://api.rms.rakuten.co.jp/es/1.0/coupon/issue', {
+  const res  =UrlFetchApp.fetch('https://api.rms.rakuten.co.jp/es/1.0/coupon/issue', {
     method:      'post',
     contentType: 'text/xml; charset=UTF-8',
     headers:     getRmsAuthHeader_(tenantId),

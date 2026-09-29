@@ -351,7 +351,7 @@ function buildCouponIssueXml_(p) {
   if (errors.length) return { ok: false, xml: '', errors: errors };
 
   const fmt = d => Utilities.formatDate(d, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss'+09:00'");
-  const xml =
+  const head =
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<request><couponIssueRequest><coupon>' +
     `<couponName>${escapeXml_(p.name)}</couponName>` +
@@ -362,84 +362,112 @@ function buildCouponIssueXml_(p) {
     '<itemType>4</itemType>' +
     `<discountType>${int(p.discountType)}</discountType>` +
     `<discountFactor>${int(p.discountFactor)}</discountFactor>` +
-    `<memberAvailMaxCount>${int(p.memberAvailMaxCount)}</memberAvailMaxCount>` +
-    '<purchaseHistoryCond><type>0</type></purchaseHistoryCond>' +
-    '<multiRankCond><rankCond>0</rankCond></multiRankCond>' +
-    '<ageRangeCond><lowerBound>0</lowerBound><upperBound>0</upperBound></ageRangeCond>' +
-    '<birthmonthCond>0</birthmonthCond>' +
-    '<multiPrefectureCond><prefectureCond>NONE</prefectureCond></multiPrefectureCond>' +
-    '<combineFlag>1</combineFlag>' +
-    '<displayFlag>0</displayFlag>' +
-    '</coupon></couponIssueRequest></request>';
-  return { ok: true, xml: xml, errors: [] };
+    `<memberAvailMaxCount>${int(p.memberAvailMaxCount)}</memberAvailMaxCount>`;
+  const tail = '</coupon></couponIssueRequest></request>';
+  // variant（2026-07-05 に "Request data is wrong format" で失敗した従来形 legacy が、余分な条件要素
+  //  ageRangeCond 0/0・multiPrefectureCond=NONE を含むことが疑わしいため、最小構成を用意）
+  //  minimal  : 動作実績のある他実装（JakeJP/Rakuten.RMS.Api のサンプル）と同じ最小項目 + multiRankCond
+  //  go_model : bububa/rakuten-go の CouponToIssue が常に出力する項目（purchaseHistoryCond>type, birthmonthCond）まで
+  //  legacy   : 従来形（既定。挙動を変えない）
+  const variant = p.variant || 'legacy';
+  let cond;
+  if (variant === 'minimal') {
+    cond = '<multiRankCond><rankCond>0</rankCond></multiRankCond><combineFlag>0</combineFlag><displayFlag>0</displayFlag>';
+  } else if (variant === 'go_model') {
+    cond = '<purchaseHistoryCond><type>0</type></purchaseHistoryCond><multiRankCond><rankCond>0</rankCond></multiRankCond>' +
+           '<birthmonthCond>0</birthmonthCond><combineFlag>1</combineFlag><displayFlag>0</displayFlag>';
+  } else {
+    cond = '<purchaseHistoryCond><type>0</type></purchaseHistoryCond>' +
+           '<multiRankCond><rankCond>0</rankCond></multiRankCond>' +
+           '<ageRangeCond><lowerBound>0</lowerBound><upperBound>0</upperBound></ageRangeCond>' +
+           '<birthmonthCond>0</birthmonthCond>' +
+           '<multiPrefectureCond><prefectureCond>NONE</prefectureCond></multiPrefectureCond>' +
+           '<combineFlag>1</combineFlag><displayFlag>0</displayFlag>';
+  }
+  return { ok: true, xml: head + cond + tail, errors: [] };
 }
 
-// クーポン発行（楽天Coupon API v1 — XML形式）
-// エンドポイント: POST https://api.rms.rakuten.co.jp/es/1.0/coupon/issue
-// couponStartDate は最短60分後制約あり → 現在+65分で設定
-function issueCoupon(tenantId, target) {
-  // 課金ガード・クーポン有効化ゲート（いずれも fail-closed。未設定は発行しない）
-  if (!billingAllows_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: billing_not_allowed`); return null; }
-  if (!isTenantCouponEnabled_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: settings.coupon_enabled が true ではない（fail-closed）`); return null; }
-
-  const ss    = getTenantSpreadsheet(tenantId);
-  const sheet = ss.getSheetByName('coupons');
-
-  const rule = getCouponRules_(tenantId).find(r => r.rule_id === target.rule_id);
-  if (!rule) {
-    Logger.log(`issueCoupon: rule not found [${target.rule_id}]`);
-    return null;
-  }
-
-  const validDays = getCouponValidDays_(tenantId); // settings.coupon_valid_days（既定30日）
-  const start = new Date(Date.now() + 65 * 60 * 1000);          // 現在+65分
-  const end   = new Date(start.getTime() + validDays * 24 * 60 * 60 * 1000); // 開始+validDays日
-
-  const built = buildCouponIssueXml_({
-    name: rule.coupon_name, caption: 'レビュー投稿特典', start: start, end: end,
-    issueCount: 100, discountType: 1, discountFactor: rule.discount, memberAvailMaxCount: 0,
-  });
-  if (!built.ok) {
-    Logger.log(`issueCoupon FAILED [${tenantId}]: request validation: ${built.errors.join(' / ')}`);
-    sheet.appendRow(['', target.buyer_key, target.rule_id, Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
-      '', `ERROR: validation: ${built.errors.join(' / ').substring(0, 250)}`]);
-    return null;
-  }
-  const xml = built.xml;
-
-  const res  =UrlFetchApp.fetch('https://api.rms.rakuten.co.jp/es/1.0/coupon/issue', {
+/** クーポンAPIへ POST する（ゲート判定は呼び出し側）。応答の systemStatus / couponCode / pcGetUrl を返す */
+function postCouponIssue_(tenantId, xml) {
+  const res = UrlFetchApp.fetch('https://api.rms.rakuten.co.jp/es/1.0/coupon/issue', {
     method:      'post',
     contentType: 'text/xml; charset=UTF-8',
     headers:     getRmsAuthHeader_(tenantId),
     payload:     xml,
     muteHttpExceptions: true,
   });
+  const body = res.getContentText();
+  const pick = tag => (body.match(new RegExp(`<${tag}>([^<]*)</${tag}>`)) || [])[1] || '';
+  const systemStatus = pick('systemStatus'), couponCode = pick('couponCode');
+  return { ok: systemStatus === 'OK' && !!couponCode, http_code: res.getResponseCode(), systemStatus: systemStatus,
+           couponCode: couponCode, pcGetUrl: pick('pcGetUrl'), body: body };
+}
 
-  const body         = res.getContentText();
-  Logger.log(`issueCoupon raw response [${tenantId}]: ${body}`);
-  const systemStatus = (body.match(/<systemStatus>([^<]*)<\/systemStatus>/) || [])[1] || '';
-  const couponCode   = (body.match(/<couponCode>([^<]*)<\/couponCode>/)   || [])[1] || '';
-  const pcGetUrl     = (body.match(/<pcGetUrl>([^<]*)<\/pcGetUrl>/)       || [])[1] || '';
-  const validUntilStr = Utilities.formatDate(end, 'Asia/Tokyo', 'yyyy/MM/dd');
+// クーポン発行（楽天Coupon API v1 — XML形式）
+// エンドポイント: POST https://api.rms.rakuten.co.jp/es/1.0/coupon/issue
+// couponStartDate は最短60分後制約あり → 現在+65分で設定
+/**
+ * opts（省略可・テスト専用）:
+ *   force      … true なら settings.coupon_enabled ゲートだけを通す（課金ガードは常に有効。settings は変更しない）
+ *   params     … { name, caption, start, end, issueCount, discountType, discountFactor, memberAvailMaxCount, variant } ルール由来の値を上書き
+ *   testRunId  … 指定すると結果を coupons ではなく sends に coupon_test_{runId} として記録する
+ *   out        … 渡したオブジェクトへ { xml, body, ok, variant } を書き戻す（失敗時のレスポンス全文の報告用）
+ * 通常運用（opts なし）の挙動は従来どおり。force はテスト専用で、パイプラインからは渡さない。
+ */
+function issueCoupon(tenantId, target, opts) {
+  opts = opts || {};
+  // 課金ガード・クーポン有効化ゲート（いずれも fail-closed。未設定は発行しない）
+  if (!billingAllows_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: billing_not_allowed`); return null; }
+  if (opts.force !== true && !isTenantCouponEnabled_(tenantId)) { Logger.log(`issueCoupon skip [${tenantId}]: settings.coupon_enabled が true ではない（fail-closed）`); return null; }
 
-  if (systemStatus !== 'OK' || !couponCode) {
-    Logger.log(`issueCoupon FAILED [${tenantId}]: ${body}`);
-    sheet.appendRow([
-      '', target.buyer_key, target.rule_id,
-      Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
-      '', `ERROR: ${body.substring(0, 300)}`,
-    ]);
+  const ss    = getTenantSpreadsheet(tenantId);
+  const sheet = ss.getSheetByName(opts.testRunId ? 'sends' : 'coupons');
+  const nowStr = () => Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  // 記録: 通常は coupons（coupon_id, buyer_key, rule_id, issued_at, valid_until, api_result）、テストは sends（coupon_test_{runId}）
+  const record = (code, validUntil, result) => {
+    if (opts.testRunId) sheet.appendRow([`coupon_test_${opts.testRunId}`, `coupon_test_${opts.testRunId}`, '', 'coupon_test', nowStr(), 'coupon_test', code ? `OK couponCode=${code} ${result}` : result]);
+    else sheet.appendRow([code, target.buyer_key, target.rule_id, nowStr(), validUntil, result]);
+  };
+
+  let params, discount;
+  if (opts.params) { params = opts.params; discount = params.discountFactor; }
+  else {
+    const rule = getCouponRules_(tenantId).find(r => r.rule_id === target.rule_id);
+    if (!rule) {
+      Logger.log(`issueCoupon: rule not found [${target.rule_id}]`);
+      return null;
+    }
+    const validDays = getCouponValidDays_(tenantId); // settings.coupon_valid_days（既定30日）
+    const start = new Date(Date.now() + 65 * 60 * 1000);          // 現在+65分
+    const end   = new Date(start.getTime() + validDays * 24 * 60 * 60 * 1000); // 開始+validDays日
+    params = { name: rule.coupon_name, caption: 'レビュー投稿特典', start: start, end: end,
+               issueCount: 100, discountType: 1, discountFactor: rule.discount, memberAvailMaxCount: 0 };
+    discount = rule.discount;
+  }
+
+  const built = buildCouponIssueXml_(params);
+  if (opts.out) opts.out.variant = params.variant || 'legacy';
+  if (!built.ok) {
+    Logger.log(`issueCoupon FAILED [${tenantId}]: request validation: ${built.errors.join(' / ')}`);
+    record('', '', `ERROR: validation: ${built.errors.join(' / ').substring(0, 250)}`);
+    if (opts.out) { opts.out.ok = false; opts.out.body = `validation: ${built.errors.join(' / ')}`; opts.out.xml = ''; }
     return null;
   }
 
-  sheet.appendRow([
-    couponCode, target.buyer_key, target.rule_id,
-    Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
-    validUntilStr, `OK url=${pcGetUrl}`,
-  ]);
+  const r = postCouponIssue_(tenantId, built.xml);
+  if (opts.out) { opts.out.ok = r.ok; opts.out.xml = built.xml; opts.out.body = r.body; }
+  Logger.log(`issueCoupon raw response [${tenantId}]: ${r.body}`);
+  const validUntilStr = Utilities.formatDate(params.end, 'Asia/Tokyo', 'yyyy/MM/dd');
 
-  Logger.log(`issueCoupon OK [${tenantId}] coupon=${couponCode}`);
-  return { coupon_id: couponCode, valid_until: validUntilStr, get_url: pcGetUrl, discount: rule.discount };
+  if (!r.ok) {
+    Logger.log(`issueCoupon FAILED [${tenantId}]: ${r.body}`);
+    record('', '', `ERROR${opts.out ? ' [' + opts.out.variant + ']' : ''}: ${r.body.substring(0, 300)}`);
+    return null;
+  }
+
+  record(r.couponCode, validUntilStr, opts.testRunId ? `url=${r.pcGetUrl} variant=${opts.out ? opts.out.variant : ''}` : `OK url=${r.pcGetUrl}`);
+  Logger.log(`issueCoupon OK [${tenantId}] coupon=${r.couponCode}`);
+  return { coupon_id: r.couponCode, valid_until: validUntilStr, get_url: r.pcGetUrl, discount: discount };
 }
 
 // XML特殊文字エスケープ

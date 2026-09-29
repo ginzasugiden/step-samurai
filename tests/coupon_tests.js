@@ -27,14 +27,17 @@ const master = new Sheet([HDR,
 const rules = JSON.stringify([{ rule_id: 'first_purchase', discount: 300, enabled: true }]);
 const tenantBook = (enabledRow) => new SS({
   settings: new Sheet([['key', 'value', 'description', 'editable_by_tenant'], ['coupon_rules', rules, '', 'FALSE'], ['coupon_valid_days', '30', '', 'TRUE'], ...(enabledRow ? [enabledRow] : [])]),
-  coupons: new Sheet([['coupon_id', 'buyer_key', 'rule_id', 'issued_at', 'valid_until', 'api_result']]) });
+  coupons: new Sheet([['coupon_id', 'buyer_key', 'rule_id', 'issued_at', 'valid_until', 'api_result']]),
+  sends: new Sheet([['send_id', 'order_number', 'buyer_key', 'type', 'sent_at', 'template_id', 'result']]) });
 const books = { MASTER: new SS({ tenants: master }), S_TF: tenantBook(null), S_ON: tenantBook(['coupon_enabled', 'true', '', 'FALSE']), S_CN: tenantBook(['coupon_enabled', 'true', '', 'FALSE']) };
-let fetchCalls = [];
+let fetchCalls = []; let scripted = null;   // scripted: 呼び出し順のレスポンス本文（null なら常に成功）
+const OKBODY = '<result><systemStatus>OK</systemStatus><coupon><couponCode>TESTCODE1</couponCode><pcGetUrl>https://x/</pcGetUrl></coupon></result>';
+const NGBODY = '<result><status><systemStatus>NG</systemStatus><message>Request data is wrong format</message></status></result>';
 const ctx = { PropertiesService, Utilities, Logger, console, SpreadsheetApp: { openById: id => books[id] }, hash_equals_: (a, b) => a === b,
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) }, isDryRun_: () => false,
-  UrlFetchApp: { fetch: (url, o) => { fetchCalls.push({ url, o }); return { getResponseCode: () => 200, getContentText: () => '<result><systemStatus>OK</systemStatus><coupon><couponCode>TESTCODE1</couponCode><pcGetUrl>https://x/</pcGetUrl></coupon></result>' }; } } };
+  UrlFetchApp: { fetch: (url, o) => { fetchCalls.push({ url, o }); const body = scripted ? scripted[Math.min(fetchCalls.length - 1, scripted.length - 1)] : OKBODY; return { getResponseCode: () => 200, getContentText: () => body }; } } };
 vm.createContext(ctx);
-['tenant.gs', 'config.gs', 'billing.gs', 'coupon_engine.gs', 'rakuten_api.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
+['tenant.gs', 'config.gs', 'billing.gs', 'coupon_engine.gs', 'rakuten_api.gs', 'coupon_test.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 ctx.getRmsAuthHeader_ = () => ({ Authorization: 'ESA dummy' });
 vm.runInContext('function getRmsAuthHeader_() { return { Authorization: "ESA dummy" }; }', ctx);
 vm.runInContext('function billingToday_() { return "2026-09-29"; }', ctx);
@@ -72,5 +75,43 @@ t('coupon_enabled=true かつ billing 許可なら 1 回だけ /es/1.0/coupon/is
   assert.equal(fetchCalls[0].url, 'https://api.rms.rakuten.co.jp/es/1.0/coupon/issue'); assert.equal(fetchCalls[0].o.method, 'post'); assert.ok(fetchCalls[0].o.payload.includes('<itemType>4</itemType>'));
   assert.equal(books.S_ON.sheets.coupons.rows[1][0], 'TESTCODE1'); });
 t('tokyoflower の settings に coupon_enabled は入っていない', () => assert.ok(!books.S_TF.sheets.settings.rows.some(r => r[0] === 'coupon_enabled')));
+
+
+console.log('variant（実発行テスト用の形式）');
+const TAGS_MIN = ['request', 'couponIssueRequest', 'coupon', 'couponName', 'couponCaption', 'couponStartDate', 'couponEndDate', 'issueCount', 'itemType', 'discountType', 'discountFactor', 'memberAvailMaxCount', 'multiRankCond', 'rankCond', 'combineFlag', 'displayFlag'];
+t('minimal: 動作実績のある最小構成（ageRangeCond / multiPrefectureCond / birthmonthCond / purchaseHistoryCond を含まない）', () => {
+  const r = ctx.buildCouponIssueXml_(Object.assign(base(), { variant: 'minimal' })); assert.equal(r.ok, true); assert.equal(tagsOf(r.xml).join(','), TAGS_MIN.join(','));
+  assert.ok(!/ageRangeCond|multiPrefectureCond|prefectureCond|birthmonthCond/.test(r.xml)); assert.ok(r.xml.includes('<itemType>4</itemType>')); });
+t('go_model: purchaseHistoryCond>type と birthmonthCond を追加、ageRange/prefecture は含まない', () => {
+  const r = ctx.buildCouponIssueXml_(Object.assign(base(), { variant: 'go_model' })); assert.equal(r.ok, true);
+  assert.ok(r.xml.includes('<purchaseHistoryCond><type>0</type></purchaseHistoryCond>') && r.xml.includes('<birthmonthCond>0</birthmonthCond>')); assert.ok(!/ageRangeCond|multiPrefectureCond/.test(r.xml)); });
+t('variant 省略（本番パイプライン）は従来形 legacy のまま', () => { const r = ctx.buildCouponIssueXml_(base()); assert.ok(r.xml.includes('<multiPrefectureCond>') && r.xml.includes('<ageRangeCond>')); });
+
+console.log('force（テスト専用）と sends 記録');
+const TP = () => ({ name: 'n', caption: 'c', start: D(Date.now() + 26 * 3600e3), end: D(Date.now() + 74 * 3600e3), issueCount: 1, discountType: 1, discountFactor: 100, memberAvailMaxCount: 1, variant: 'minimal' });
+t('force なし・coupon_enabled 未設定は発行しない / force=true ならそのゲートだけ通り HTTP 1 回', () => {
+  fetchCalls = []; scripted = null;
+  assert.equal(ctx.issueCoupon('tokyoflower', target, { params: TP(), testRunId: 'R0' }), null); assert.equal(fetchCalls.length, 0);
+  const out = {}; const r = ctx.issueCoupon('tokyoflower', target, { force: true, params: TP(), testRunId: 'R1', out }); assert.equal(r.coupon_id, 'TESTCODE1'); assert.equal(fetchCalls.length, 1);
+  const row = books.S_TF.sheets.sends.rows[1]; assert.equal(row[0], 'coupon_test_R1'); assert.equal(row[3], 'coupon_test'); assert.ok(row[6].includes('couponCode=TESTCODE1')); assert.equal(books.S_TF.sheets.coupons.rows.length, 1);
+  assert.ok(!books.S_TF.sheets.settings.rows.some(x => x[0] === 'coupon_enabled'), 'settings は変更されない'); });
+t('force でも課金ガード(canceled)は通らない', () => { fetchCalls = []; assert.equal(ctx.issueCoupon('cancelon', target, { force: true, params: TP() }), null); assert.equal(fetchCalls.length, 0); });
+
+console.log('runCouponTestTokyoflower（最大3試行・1件のみ）');
+const setDry = v => { const rows = books.S_TF.sheets.settings.rows; const r = rows.find(x => x[0] === 'dry_run'); if (r) r[1] = v; else rows.push(['dry_run', v, '', 'FALSE']); };
+t('dry_run=true なら発行しない', () => { setDry('true'); fetchCalls = []; scripted = null; assert.equal(ctx.runCouponTestTokyoflower(), null); assert.equal(fetchCalls.length, 0); });
+t('テスト用パラメータ: 100円・上限1・1人1回・開始=翌日10:00JST・2日・itemType=4', () => {
+  const p = ctx.couponTestParams_(D(Date.parse('2026-09-29T03:00:00Z')), 'minimal'); p.now = D(Date.parse('2026-09-29T03:00:00Z'));
+  const b = ctx.buildCouponIssueXml_(p); assert.equal(b.ok, true, JSON.stringify(b.errors));
+  assert.ok(b.xml.includes('<couponStartDate>2026-09-30T10:00:00+09:00</couponStartDate>') && b.xml.includes('<couponEndDate>2026-10-02T10:00:00+09:00</couponEndDate>'));
+  assert.ok(b.xml.includes('<issueCount>1</issueCount>') && b.xml.includes('<discountFactor>100</discountFactor>') && b.xml.includes('<discountType>1</discountType>') && b.xml.includes('<memberAvailMaxCount>1</memberAvailMaxCount>') && b.xml.includes('<itemType>4</itemType>')); });
+t('1回目 wrong format → 2回目成功で停止（発行は1件）。sends に試行ごとの記録', () => {
+  setDry('false'); books.S_TF.sheets.sends.rows.length = 1; fetchCalls = []; scripted = [NGBODY, OKBODY];
+  const r = ctx.runCouponTestTokyoflower(); assert.equal(r.ok, true); assert.equal(r.variant, 'go_model'); assert.equal(fetchCalls.length, 2);
+  const rows = books.S_TF.sheets.sends.rows.slice(1); assert.equal(rows.length, 2); assert.ok(rows[0][6].startsWith('ERROR [minimal]')); assert.ok(rows[1][6].includes('TESTCODE1'));
+  assert.ok(fetchCalls[0].o.payload.includes('<multiRankCond>') && !fetchCalls[0].o.payload.includes('ageRangeCond')); });
+t('3回すべて wrong format なら停止（発行0件・最大3回）', () => { books.S_TF.sheets.sends.rows.length = 1; fetchCalls = []; scripted = [NGBODY]; const r = ctx.runCouponTestTokyoflower(); assert.equal(r.ok, false); assert.equal(fetchCalls.length, 3); });
+t('形式以外のエラー（権限など）は再試行しない', () => { fetchCalls = []; scripted = ['<result><status><systemStatus>NG</systemStatus><message>Authentication failed</message></status></result>']; assert.equal(ctx.runCouponTestTokyoflower().ok, false); assert.equal(fetchCalls.length, 1); });
+t('テスト後も tokyoflower に coupon_enabled は入らない', () => assert.ok(!books.S_TF.sheets.settings.rows.some(r => r[0] === 'coupon_enabled')));
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

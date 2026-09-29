@@ -34,6 +34,7 @@ function runPipeline() {
       sendPendingMails(tenant.tenant_id);
       try { sendPendingReviewThanks(tenant.tenant_id); } catch(e) { Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`); }
       Logger.log(`[${tenant.tenant_id}] pipeline done`);
+      pipelineLog_(tenant.tenant_id, 'pipeline_done', '');
     } catch(e) {
       Logger.log(`[${tenant.tenant_id}] pipeline error: ${e.message}`);
       notifyAdmin_(`[step-samurai] ${tenant.tenant_id} パイプラインエラー: ${e.message}`);
@@ -65,8 +66,10 @@ function runHourlyFollowPipeline() {
         notifyAdmin_(`[step-samurai] ${tenant.tenant_id} レビューお礼メールエラー: ${e.message}`);
       }
       Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline done`);
+      pipelineLog_(tenant.tenant_id, 'hourly_done', '');
     } catch(e) {
       Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline error: ${e.message}`);
+      pipelineLog_(tenant.tenant_id, 'hourly_error', e.message);
       notifyAdmin_(`[step-samurai] ${tenant.tenant_id} runHourlyFollowPipelineエラー: ${e.message}`);
     }
   });

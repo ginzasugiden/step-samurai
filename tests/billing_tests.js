@@ -15,7 +15,7 @@ class Sheet {
   getRange(r, c, nr = 1, nc = 1) { const s = this; return {
     getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (s.rows[r - 1 + i] || [])[c - 1 + j] ?? '')),
     setValue: v => { while (s.rows.length < r) s.rows.push([]); s.rows[r - 1][c - 1] = v; } }; }
-  appendRow(r) { this.rows.push(r.slice()); } }
+  appendRow(r) { this.rows.push(r.slice()); } deleteRows(from, n) { this.rows.splice(from - 1, n); } }
 class SS { constructor(sh) { this.sheets = sh; } getSheetByName(n) { return this.sheets[n] || null; } insertSheet(n) { return (this.sheets[n] = new Sheet([])); } }
 const master = new Sheet([['tenant_id', 'shop_name', 'spreadsheet_id', 'status', 'shop_email', 'cc_email'],
   ['tokyoflower', '東京', 'S1', 'active', 'a@x.jp', ''], ['legacyshop', '旧', 'S2', 'active', 'b@x.jp', ''], ['newshop', '新', 'S3', 'setup', 'c@x.jp', ''], ['cancelshop', '解', 'S4', 'active', 'd@x.jp', '']]);
@@ -114,6 +114,17 @@ t('無関係イベント・未突合顧客は状態を変えない', () => {
   assert.equal(ctx.handleFincodeWebhook_(ev({ fincode_event_id: 'i2', event_payload: { event: 'payments.card.capture', status: 'CAPTURED', customer_id: 'nobody' } })).ignored, 'tenant_not_matched');
   assert.equal(B('newshop').billing_status, 'active'); });
 t('event_id 無しは拒否', () => assert.equal(ctx.handleFincodeWebhook_({ bridge_token: 'BT', event_payload: {} }).error, 'event_id_required'));
+
+console.log('pipeline_log（監視用シート）');
+t('billing skip と hourly_done が pipeline_log に記録される', () => {
+  const pl = books.MASTER.sheets.pipeline_log; assert.ok(pl, 'pipeline_log タブが作られている');
+  assert.deepEqual(Array.from(pl.rows[0]), ['tenant_id', 'event', 'detail', 'at']);
+  assert.ok(pl.rows.some(r => r[0] === 'cancelshop' && r[1] === 'billing_skip'));
+  assert.ok(pl.rows.some(r => r[0] === 'tokyoflower' && r[1] === 'hourly_done')); });
+t('直近200行でローテーションする（古い行から削除）', () => {
+  for (let i = 0; i < 260; i++) ctx.pipelineLog_('rot', 'e', 'n' + i);
+  const pl = books.MASTER.sheets.pipeline_log; assert.equal(pl.rows.length, 201); assert.equal(pl.rows[200][2], 'n259'); assert.ok(!pl.rows.some(r => r[2] === 'n0')); });
+t('シート書込に失敗しても本処理へ例外を出さない', () => { const orig = ctx.getMasterWorkbook_; ctx.getMasterWorkbook_ = () => { throw new Error('boom'); }; assert.doesNotThrow(() => ctx.pipelineLog_('x', 'y', 'z')); ctx.getMasterWorkbook_ = orig; });
 
 console.log('seedBillingInitial（初回リリース）');
 t('tokyoflower のみ許可・billing 未設定の他行（demo）は canceled/not in service で拒否。既設定行は不変', () => {

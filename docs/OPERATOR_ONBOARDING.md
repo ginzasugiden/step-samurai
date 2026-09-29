@@ -33,7 +33,7 @@
 
 ## 6. E2E 確認（実機）
 `tests/e2e_onboard_tests.js`（ローカル）で次を確認済み: 招待発行 → テナント/タブ自動生成 → trial（+30日）→ ダミーキーで接続失敗 → active 不可 → 招待再利用不可 → 他店データ非表示 → 片付け。
-実 GAS で行う場合は tenant_id を `e2etest_<yyyyMMddHHmmss>` とし、完了後に `disabled` → 専用スプレッドシート・`tenants` 行・`tenant_secrets`・`billing_events`・`tenant_auth`・`invites` の該当行を削除し、`e2etest` が全シートに残らないことを確認する。
+実 GAS で行う場合は tenant_id を `e2etest_<yyyyMMddHHmmss>` とし、完了後に `disabled` → 専用スプレッドシート・`tenants` 行・`tenant_secrets`・`billing_events`・`pipeline_log`・`tenant_auth`・`invites` の該当行を削除し、`e2etest` が全シートに残らないことを確認する。
 
 ## 7. クーポン
 クーポン経路の再有効化（`settings.coupon_enabled` ゲート・リクエスト修正・実発行テスト）は **未実施**（作業レポート参照）。現状は課金ガード（`runPipeline` 先頭）のみ適用され、`runHourlyFollowPipeline` はクーポンを呼ばない。LP のクーポン項目は「準備中」。

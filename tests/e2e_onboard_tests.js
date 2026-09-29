@@ -78,6 +78,7 @@ t('後片付け: disabled → タブ・行・secrets・billing_events を削除�
   ctx.deleteTenantSecrets_(TID);
   const del = (sh, col) => { for (let i = sh.rows.length - 1; i >= 1; i--) if (String(sh.rows[i][col]) === TID) sh.deleteRow(i + 1); };
   del(master, 0); del(books.MASTER.sheets.billing_events, 2); del(books.MASTER.sheets.tenant_auth, 0); del(books.MASTER.sheets.invites, 0);
+  if (books.MASTER.sheets.pipeline_log) del(books.MASTER.sheets.pipeline_log, 0);
   const dump = JSON.stringify(Object.values(books).map(b => Object.values(b.sheets).map(s => s.rows)));
   assert.ok(!dump.includes('e2etest'), 'e2etest が残っている'); });
 

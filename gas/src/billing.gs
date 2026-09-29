@@ -152,8 +152,27 @@ function billingDecision_(tenantId) {
 /** true なら稼働可。拒否時は理由をログに残す（呼び出し側は skip する） */
 function billingAllows_(tenantId) {
   const d = billingDecision_(tenantId);
-  if (!d.allowed) Logger.log(`[${tenantId}] billing skip: ${d.reason}`);
+  if (!d.allowed) {
+    Logger.log(`[${tenantId}] billing skip: ${d.reason}`);
+    pipelineLog_(tenantId, 'billing_skip', d.reason);
+  }
   return d.allowed;
+}
+
+// ===== pipeline_log（監視用。マスターシート pipeline_log タブ・直近200行） =====
+const PIPELINE_LOG_SHEET_ = 'pipeline_log';
+const PIPELINE_LOG_MAX_ROWS_ = 200;
+
+/** 実行ログをシートにも残す。失敗しても本処理へは影響させない（例外は握りつぶしてログのみ） */
+function pipelineLog_(tenantId, event, detail) {
+  try {
+    const ss = getMasterWorkbook_();
+    let sh = ss.getSheetByName(PIPELINE_LOG_SHEET_);
+    if (!sh) { sh = ss.insertSheet(PIPELINE_LOG_SHEET_); sh.appendRow(['tenant_id', 'event', 'detail', 'at']); }
+    sh.appendRow([tenantId, event, String(detail || '').substring(0, 200), billingNowStr_()]);
+    const excess = sh.getLastRow() - 1 - PIPELINE_LOG_MAX_ROWS_;
+    if (excess > 0) sh.deleteRows(2, excess);
+  } catch (e) { Logger.log(`pipelineLog_ skip: ${e.message}`); }
 }
 
 // ===== テナント作成時 / 手動切替 =====

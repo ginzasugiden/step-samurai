@@ -111,6 +111,7 @@ function runLicenseCheck() {
 const MANAGED_TRIGGERS_ = [
   { handler: 'runHourlyFollowPipeline', build: b => b.timeBased().everyHours(1) },
   { handler: 'checkBillingDaily',       build: b => b.timeBased().everyDays(1).atHour(9) },
+  { handler: 'runLicenseCheck',       build: b => b.timeBased().everyDays(1).atHour(9) },
 ];
 
 /**

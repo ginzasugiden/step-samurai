@@ -23,20 +23,21 @@ t('planManagedTriggers_: 0本→作成 / 1本→維持 / 2本以上→1本目を
   assert.deepEqual(ctx.planManagedTriggers_([], managed), { create: ['a', 'b'], dedupe: [], keep: [] });
   assert.deepEqual(ctx.planManagedTriggers_(['a', 'x', 'b'], managed), { create: [], dedupe: [], keep: ['a', 'b'] });
   assert.deepEqual(ctx.planManagedTriggers_(['a', 'b', 'a', 'a'], managed), { create: [], dedupe: [2, 3], keep: ['a', 'b'] }); });
-t('空の状態: runHourlyFollowPipeline（毎時）と checkBillingDaily（毎日9時）だけが作られる', () => {
-  const r = ctx.setupTriggers(); assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline']); assert.equal(r.created.length, 2);
-  const h = triggers.find(x => x.handler === 'runHourlyFollowPipeline'), d = triggers.find(x => x.handler === 'checkBillingDaily');
-  assert.equal(h.kind, 'hours'); assert.equal(h.every, 1); assert.equal(d.kind, 'days'); assert.equal(d.hour, 9); });
+t('空の状態: runHourlyFollowPipeline（毎時）・checkBillingDaily（毎日9時）・runLicenseCheck（毎日9時）の3本が作られる', () => {
+  const r = ctx.setupTriggers(); assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline', 'runLicenseCheck']); assert.equal(r.created.length, 3);
+  const h = triggers.find(x => x.handler === 'runHourlyFollowPipeline'), d = triggers.find(x => x.handler === 'checkBillingDaily'), l = triggers.find(x => x.handler === 'runLicenseCheck');
+  assert.equal(h.kind, 'hours'); assert.equal(h.every, 1); assert.equal(d.kind, 'days'); assert.equal(d.hour, 9); assert.equal(l.kind, 'days'); assert.equal(l.every, 1); assert.equal(l.hour, 9); });
 t('冪等: 何度実行しても本数も既存トリガーの実体も変わらない（時刻がずれない）', () => {
-  const ids = triggers.map(x => x.id); ctx.setupTriggers(); ctx.setupTriggers(); assert.deepEqual(triggers.map(x => x.id), ids); assert.equal(triggers.length, 2); });
-t('他のトリガー（runPipeline / runLicenseCheck / 任意）は消さない', () => {
-  triggers = []; mk('runLicenseCheck'); mk('runMonthlyReport'); mk('someManualFunction'); ctx.setupTriggers();
-  assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline', 'runLicenseCheck', 'runMonthlyReport', 'someManualFunction']); });
+  const ids = triggers.map(x => x.id); ctx.setupTriggers(); ctx.setupTriggers(); assert.deepEqual(triggers.map(x => x.id), ids); assert.equal(triggers.length, 3); });
+t('他のトリガー（runPipeline / runMonthlyReport / 任意）は消さない', () => {
+  triggers = []; mk('runPipeline'); mk('runMonthlyReport'); mk('someManualFunction'); ctx.setupTriggers();
+  assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline', 'runLicenseCheck', 'runMonthlyReport', 'runPipeline', 'someManualFunction']); });
 t('管理対象が重複登録されていれば1本に減らし、片方だけ無ければ補う', () => {
   triggers = []; const first = mk('runHourlyFollowPipeline'); mk('runHourlyFollowPipeline'); mk('runHourlyFollowPipeline'); mk('runPipeline');
-  ctx.setupTriggers(); assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline', 'runPipeline']); assert.ok(triggers.includes(first), '1本目が残る'); });
-t('現在の本番構成（runHourlyFollowPipeline と checkBillingDaily のみ）では何も変更しない', () => {
+  ctx.setupTriggers(); assert.deepEqual(handlers(), ['checkBillingDaily', 'runHourlyFollowPipeline', 'runLicenseCheck', 'runPipeline']); assert.ok(triggers.includes(first), '1本目が残る'); });
+t('現在の本番構成（runHourlyFollowPipeline と checkBillingDaily の2本）では runLicenseCheck だけが追加され、既存2本は変わらない', () => {
   triggers = []; mk('runHourlyFollowPipeline'); mk('checkBillingDaily'); const ids = triggers.map(x => x.id); const r = ctx.setupTriggers();
-  assert.deepEqual(triggers.map(x => x.id), ids); assert.equal(r.created.length, 0); assert.equal(r.deduped, 0); });
+  assert.deepEqual(triggers.slice(0, 2).map(x => x.id), ids); assert.deepEqual(r.created, ['runLicenseCheck']); assert.equal(r.deduped, 0); assert.equal(triggers.length, 3);
+  const r2 = ctx.setupTriggers(); assert.equal(r2.created.length, 0); assert.equal(triggers.length, 3); });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

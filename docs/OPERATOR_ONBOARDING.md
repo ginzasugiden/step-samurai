@@ -27,7 +27,8 @@
 
 ## 4. 日次チェック `checkBillingDaily()`
 `trial_end` を過ぎた `trial` に `billing_note` へ「trial期限切れ」を記録する（ステータスは自動変更しない）。あわせて **`ADMIN_EMAIL` 宛てに一覧メール**を1通送る: ① 期限7日前 ② 期限当日 ③ 期限切れ（今回初めて検知）。同じ日に2回は送らない（`billing_events` の `trial_digest_sent`）。`ADMIN_EMAIL` 未設定の場合は送らず実行ログに内容だけ出す。
-- トリガーは GAS エディタで **`setupTriggers` を1回実行**すると、`runHourlyFollowPipeline`（毎時）と `checkBillingDaily`（毎日9時）が無ければ作られる（あれば何もしない。重複は1本に減らす。**他のトリガーは削除しない**）。
+- トリガーは GAS エディタで **`setupTriggers` を1回実行**すると、`runHourlyFollowPipeline`（毎時）・`checkBillingDaily`（毎日9時）・`runLicenseCheck`（毎日9時）の3本が無ければ作られる（あれば何もしない。重複は1本に減らす。**他のトリガーは削除しない**）。
+- `runLicenseCheck` は active 全テナントの RMS ライセンス残り30日以内と失効済みを `ADMIN_EMAIL` に通知する（テナントごとに同じ日に2回は送らない＝`billing_events` の `license_notice_sent`。`ADMIN_EMAIL` 未設定の場合は送らず実行ログに出すだけ）。
 - 通知の取りこぼしを避けるため、日次トリガーが動いているかを `auditOnboardingReadiness` で確認する。
 
 ## 5. fincode（審査完了後に有効化）

@@ -267,26 +267,66 @@ function getTenantSpreadsheet(tenantId) {
 
 // ===== ライセンス失効チェック =====
 
+const LICENSE_NOTICE_EVENT_ = 'license_notice_sent';
+
+/**
+ * RMS ライセンスの失効チェック（active 全テナント対象・ADMIN_EMAIL 宛ての通知のみ）。
+ * 残り 0〜30 日、または失効済みなら通知。expiry 未設定のテナントはスキップ。
+ * 重複防止: テナント×日付(Asia/Tokyo)ごとに billing_events へ license_notice_sent を追記し、同日に記録があれば送らない。
+ * ADMIN_EMAIL 未設定なら送らず内容をログに出すだけ（記録もしない）。1件の失敗で他テナントの処理は止めない。
+ * 戻り値: { sent, duplicate, no_admin_email, skipped, errors }（件数）
+ */
 function checkLicenseExpiry() {
   const tenants = listActiveTenants();
-  const today   = new Date();
+  const now     = new Date();
+  const today   = billingToday_();
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL');
+  const res = { sent: 0, duplicate: 0, no_admin_email: 0, skipped: 0, errors: 0 };
+  let seen = null;   // 当日送信済みの tenant_id 集合（初回に必要になった時だけ読む）
 
   tenants.forEach(t => {
-    let expiryStr;
     try {
-      const m = getTenantSecretMeta_(t.tenant_id, 'rms');
-      expiryStr = m ? m.meta.expiry : getApiKeyRow_(t.tenant_id).get('expiry');
-    } catch(e) {
-      Logger.log(`失効チェックスキップ [${t.tenant_id}]: ${e.message}`);
-      return;
-    }
-    if (!expiryStr) return;
+      let expiryStr;
+      try {
+        const m = getTenantSecretMeta_(t.tenant_id, 'rms');
+        expiryStr = m ? m.meta.expiry : getApiKeyRow_(t.tenant_id).get('expiry');
+      } catch(e) {
+        Logger.log(`失効チェックスキップ [${t.tenant_id}]: ${e.message}`);
+        res.skipped++; return;
+      }
+      if (!expiryStr) { res.skipped++; return; }
 
-    const diffDays = Math.floor((new Date(expiryStr) - today) / (1000 * 60 * 60 * 24));
-    if (diffDays <= 30 && diffDays >= 0) {
-      notifyAdmin_(`【step-samurai】${t.shop_name}（${t.tenant_id}）のRMSライセンスが${diffDays}日後（${expiryStr}）に失効します。`);
-    } else if (diffDays < 0) {
-      notifyAdmin_(`【step-samurai】${t.shop_name}（${t.tenant_id}）のRMSライセンスは失効済みです（${expiryStr}）。`);
+      const exp = new Date(expiryStr);
+      if (isNaN(exp.getTime())) {
+        Logger.log(`失効チェックスキップ [${t.tenant_id}]: expiry の日付が不正です（${expiryStr}）`);
+        res.skipped++; return;
+      }
+      const diffDays = Math.floor((exp - now) / (1000 * 60 * 60 * 24));
+      let message;
+      if (diffDays <= 30 && diffDays >= 0) {
+        message = `【step-samurai】${t.shop_name}（${t.tenant_id}）のRMSライセンスが${diffDays}日後（${expiryStr}）に失効します。`;
+      } else if (diffDays < 0) {
+        message = `【step-samurai】${t.shop_name}（${t.tenant_id}）のRMSライセンスは失効済みです（${expiryStr}）。`;
+      } else {
+        return;   // 31日以上先
+      }
+
+      if (!adminEmail) { Logger.log(`checkLicenseExpiry: ADMIN_EMAIL 未設定のためメール送信せず。内容: ${message}`); res.no_admin_email++; return; }
+      if (!seen) {
+        seen = {};
+        getBillingEventsSheet_().getDataRange().getValues().slice(1).forEach(r => {
+          if (String(r[4]) === LICENSE_NOTICE_EVENT_ && String(r[7]).indexOf(today) === 0) seen[String(r[2])] = true;
+        });
+      }
+      if (seen[t.tenant_id]) { Logger.log(`checkLicenseExpiry: ${t.tenant_id} は本日分送信済みのためスキップ`); res.duplicate++; return; }
+      MailApp.sendEmail(adminEmail, '[step-samurai] 通知', message);
+      appendBillingEvent_(t.tenant_id, 'system', LICENSE_NOTICE_EVENT_, '', '', `${today} expiry=${expiryStr} diff=${diffDays}`);
+      seen[t.tenant_id] = true;
+      res.sent++;
+    } catch(e) {
+      Logger.log(`checkLicenseExpiry error [${t.tenant_id}]: ${e.message}`);
+      res.errors++;
     }
   });
+  return res;
 }

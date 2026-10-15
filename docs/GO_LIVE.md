@@ -42,10 +42,10 @@ GASエディタで `runFollowMailsOnly` を手動実行する。
 
 ## (6) 毎時トリガーの登録
 
-問題がなければ、GASエディタで **`setupTriggers` を1回実行**する（画面の「トリガー」からの手動登録でも可）。`runHourlyFollowPipeline`（毎時）と `checkBillingDaily`（毎日9時）が未登録なら作られ、登録済みなら何も変えない（冪等。他のトリガーは削除しない）。
+問題がなければ、GASエディタで **`setupTriggers` を1回実行**する（画面の「トリガー」からの手動登録でも可）。`runHourlyFollowPipeline`（毎時）・`checkBillingDaily`（毎日9時）・`runLicenseCheck`（毎日9時）の3本が未登録なら作られ、登録済みなら何も変えない（冪等。他のトリガーは削除しない）。
 
 - **`runPipeline`ではなく`runHourlyFollowPipeline`を登録すること**（クーポン経路は(8)の保留事項が解決するまで動かさない設計のため。`setupTriggers` も `runPipeline` は登録しない）
-- 以前の `setupTriggers`（全トリガーを削除して `runPipeline` を登録する版）は廃止した。実行後は トリガー一覧が `runHourlyFollowPipeline`・`checkBillingDaily` になっていることを確認する
+- 以前の `setupTriggers`（全トリガーを削除して `runPipeline` を登録する版）は廃止した。実行後は トリガー一覧が `runHourlyFollowPipeline`・`checkBillingDaily`・`runLicenseCheck` の3本になっていることを確認する（`runLicenseCheck` は管理者宛てのメール通知のみで、テナントへの送信はしない）
 - 登録はこのタイミングまで意図的に行っていない（それまでは手動実行のみで様子を見る）
 
 ## (7) ロールバック手順

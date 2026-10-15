@@ -127,8 +127,9 @@ async function selectTenant(id) {
   const switched = !state.current || state.current.tenant_id !== id;
   state.current = t; $('detail-id').textContent = `${t.tenant_id}（${t.shop_name}）`; $('detail-card').hidden = false;
   $('status-select').value = t.status;
+  $('purge-btn').disabled = t.status !== 'disabled';   // disabled 以外は押せない（サーバ側でも拒否する）
   if (switched) {
-    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result'].forEach(i => { $(i).hidden = true; });
+    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result','purge-result'].forEach(i => { $(i).hidden = true; });
     document.querySelector('#probe-table tbody').innerHTML = '';
   }
   renderChecklist(t);
@@ -187,6 +188,16 @@ const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventList
     if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp', 'set_billing'].includes(action)) await reloadTenants();
   }
   catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
+});
+// 完全削除: 確認ダイアログで店舗ID を再入力させる。サーバ側も disabled・一致・複製成功を検証する
+$('purge-btn').addEventListener('click', async () => {
+  const id = state.current.tenant_id;
+  if (state.current.status !== 'disabled') { show('purge-result', 'status が disabled の店舗だけ実行できます'); return; }
+  const typed = prompt('解約済みテナント「' + id + '」の暗号化データ・ログイン情報・招待・マスター行を削除します（事前に Drive へ複製します）。\n\n実行するには店舗ID「' + id + '」をもう一度入力してください。');
+  if (typed === null) return;
+  busy($('purge-btn'), true);
+  try { const r = await callApi('purge_tenant', { tenant_id: id, confirm_tenant_id: typed.trim() }); show('purge-result', r); if (r.ok) await reloadTenants(); }
+  catch (e) { show('purge-result', '通信エラー: ' + e.message); } finally { busy($('purge-btn'), false); $('purge-btn').disabled = !state.current || state.current.status !== 'disabled'; }
 });
 op('cred-btn', 'check_credentials', 'cred-result');
 op('pw-reset-btn', 'reset_password', 'pw-result', null, 'この店舗のログインパスワードを再設定します（既存のパスワードとセッションは無効になります）。');

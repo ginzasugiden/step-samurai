@@ -11,7 +11,7 @@
  *  - 秘密情報（serviceSecret / licenseKey / トークン平文 / ハッシュ）は list_tenants の応答に含めない
  *  - トークン平文は issue_tenant_token の応答に一度だけ含まれる（シートにはハッシュのみ）
  *  - set_tenant_status で active にするには、認証情報・go_live_date・follow_days が揃っている必要がある（fail-closed）
- *  - 破壊的操作（テナント削除・シート削除）は提供しない。無効化は status=disabled のみ
+ *  - 破壊的操作は purge_tenant のみ（purge.gs）。disabled のテナント限定・tenant_id 再入力・事前に Drive へ複製。シート本体は削除せず PURGED_ に改名するだけ
  */
 
 const ADMIN_ACTIONS_ = [
@@ -21,7 +21,7 @@ const ADMIN_ACTIONS_ = [
   'check_credentials', 'probe_tenant', 'ensure_columns',
   'backfill_start', 'backfill_status', 'backfill_reset',
   'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp', 'reset_password',
-  'set_billing', 'ensure_billing_schema',
+  'set_billing', 'ensure_billing_schema', 'purge_tenant',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -57,6 +57,7 @@ function handleAdminAction_(req) {
       case 'set_credentials':     return withTenant_(tenantId, () => updateCredentials_(tenantId, payload)); // 接続テスト成功時のみ暗号化保存（onboarding.gs）
       case 'set_smtp':            return withTenant_(tenantId, () => updateSmtp_(tenantId, payload));
       case 'set_billing':         return withTenant_(tenantId, () => adminSetBilling_(tenantId, payload));
+      case 'purge_tenant':        return jsonResponse_(adminPurgeTenant_(payload));   // purge.gs（disabled のみ・tenant_id 再入力・複製後に削除）
       case 'ensure_billing_schema': return jsonResponse_({ ok: true, result: ensureBillingSchema_() });
       case 'reset_password':      return withTenant_(tenantId, () => ({ ok: true, tenant_id: tenantId, password: setTenantPassword_(tenantId, String(payload.password || '') || null) }));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });

@@ -246,8 +246,9 @@ function createTenant(shopName, tenantId, shopEmail, ccEmail) {
   ]);
   _masterRowsCache = null;
 
-  // 新規テナントは billing_status=trial（作成日〜作成日+trial_days）で開始
-  initTrialBilling_(tenantId);
+  // 新規テナントは billing_status=trial で作るが、期間（trial_start / trial_end）は申込完了（RMS 接続テスト成功）時に起算する。
+  // それまでは trial_end が空 = 稼働不可（billingDecision_ の trial_not_started）。
+  initPendingTrialBilling_(tenantId);
 
   // settings / templates タブと運用ガード設定（dry_run=true, go_live_date 空 = 送らない）を投入
   setupTenantConfigSheets_(tenantId);

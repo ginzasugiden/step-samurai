@@ -49,6 +49,12 @@ t('trial: trial_end 当日まで許可、翌日から拒否', () => {
   ctx.initTrialBilling_('newshop'); const b = B('newshop');
   assert.equal(b.billing_status, 'trial'); assert.equal(b.trial_start, '2026-09-29'); assert.equal(b.trial_end, '2026-10-29'); assert.equal(b.billing_provider, 'manual');
   assert.equal(ctx.billingAllows_('newshop'), true); setToday(ctx, '2026-10-29'); assert.equal(ctx.billingAllows_('newshop'), true); setToday(ctx, '2026-10-30'); assert.equal(ctx.billingAllows_('newshop'), false); setToday(ctx, '2026-09-29'); });
+t('trial 待機（未起算）は稼働不可、start_trial で今日から起算（冪等・起算済みは変えない）', () => {
+  master.rows.push(['pendshop', '待', 'S9', 'setup', 'p@x.jp', '']); ctx.initPendingTrialBilling_('pendshop');
+  assert.equal(B('pendshop').billing_status, 'trial'); assert.equal(B('pendshop').trial_start, ''); assert.equal(ctx.billingDecision_('pendshop').reason, 'trial_not_started'); assert.equal(ctx.billingAllows_('pendshop'), false);
+  assert.equal(ctx.checkBillingDaily().includes('pendshop'), false, '未起算は期限切れ扱いにしない');
+  const r = ctx.adminSetBilling_('pendshop', { start_trial: true }); assert.equal(r.ok, true); assert.equal(B('pendshop').trial_start, '2026-09-29'); assert.equal(B('pendshop').trial_end, '2026-10-29'); assert.equal(ctx.billingAllows_('pendshop'), true);
+  setToday(ctx, '2026-10-05'); assert.equal(ctx.adminSetBilling_('pendshop', { start_trial: true }).started, false); assert.equal(B('pendshop').trial_start, '2026-09-29', '再実行で起算日を動かさない'); setToday(ctx, '2026-09-29'); ctx.adminSetBilling_('pendshop', { billing_status: 'canceled' }); });
 t('past_due / canceled は拒否、存在しないテナントも拒否', () => {
   ctx.adminSetBilling_('cancelshop', { billing_status: 'canceled' }); assert.equal(ctx.billingAllows_('cancelshop'), false);
   ctx.adminSetBilling_('legacyshop', { billing_status: 'past_due' }); assert.equal(ctx.billingAllows_('legacyshop'), false); assert.equal(ctx.billingAllows_('ghost'), false); });

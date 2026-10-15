@@ -143,6 +143,7 @@ function billingDecision_(tenantId) {
   const st = b.billing_status;
   if (st === 'active') return { allowed: true, reason: 'active' };
   if (st === 'trial') {
+    if (!b.trial_end) return { allowed: false, reason: 'trial_not_started' };   // 申込完了前（期間は申込完了時に起算）
     if (b.trial_end && billingToday_() <= b.trial_end) return { allowed: true, reason: 'trial' };
     return { allowed: false, reason: 'trial_expired' };
   }
@@ -177,7 +178,26 @@ function pipelineLog_(tenantId, event, detail) {
 
 // ===== テナント作成時 / 手動切替 =====
 
-/** 新規テナント: trial 開始（作成日〜作成日+trial_days）。createTenant から呼ぶ */
+/** テナント作成時: trial 待機（期間は未設定）。起算は申込完了時の startTrialIfPending_ で行う */
+function initPendingTrialBilling_(tenantId) {
+  ensureBillingSchema_();
+  writeBillingFields_(tenantId, { plan: 'standard', billing_provider: 'manual', billing_status: 'trial', trial_start: '', trial_end: '' });
+  appendBillingEvent_(tenantId, 'system', 'tenant_created', '', 'trial', 'trial 起算は申込完了時');
+  return { trial_start: '', trial_end: '' };
+}
+
+/**
+ * 申込完了（RMS 接続テスト成功）時に trial を起算する。billing_status=trial かつ trial_start が空のときだけ。
+ * 既存テナント（active や、既に起算済みの trial）の値は変えない。冪等。
+ */
+function startTrialIfPending_(tenantId) {
+  const b = readBillingRow_(tenantId);
+  if (!b || b.billing_status !== 'trial' || b.trial_start) return { started: false };
+  const r = initTrialBilling_(tenantId);
+  return { started: true, trial_start: r.trial_start, trial_end: r.trial_end };
+}
+
+/** trial を起算する（今日〜今日+trial_days）。通常は startTrialIfPending_ 経由で使う */
 function initTrialBilling_(tenantId) {
   ensureBillingSchema_();
   const today = billingToday_(), end = addDaysStr_(today, getTrialDays_());
@@ -190,6 +210,10 @@ function initTrialBilling_(tenantId) {
 function adminSetBilling_(tenantId, p) {
   const cur = readBillingRow_(tenantId);
   if (!cur) return { ok: false, error: 'billing_columns_missing' };
+  if (p.start_trial) {   // 運営がセルフ登録を経ずに認証情報を入れた店舗などの trial を、今日から起算する（起算済みなら何もしない）
+    const s = startTrialIfPending_(tenantId);
+    if (!s.started && !p.billing_status && !p.billing_provider && !p.billing_note && !p.freee_invoiced) return { ok: true, started: false, billing: readBillingRow_(tenantId) };
+  }
   const fields = {};
   if (p.billing_status !== undefined && p.billing_status !== '') {
     if (BILLING_STATUSES_.indexOf(String(p.billing_status)) < 0) return { ok: false, error: 'invalid_billing_status' };
@@ -205,7 +229,7 @@ function adminSetBilling_(tenantId, p) {
     note = `${note ? note + ' / ' : ''}freee請求済 ${date} 請求書番号:${String(p.freee_invoice_no || '').trim() || '未入力'}`;
   }
   if (note) fields.billing_note = cur.billing_note ? `${cur.billing_note} | ${note}` : note;
-  if (!Object.keys(fields).length) return { ok: false, error: 'nothing_to_update' };
+  if (!Object.keys(fields).length) return p.start_trial ? { ok: true, started: true, billing: readBillingRow_(tenantId) } : { ok: false, error: 'nothing_to_update' };
   writeBillingFields_(tenantId, fields);
   appendBillingEvent_(tenantId, 'manual', 'manual_update', cur.billing_status, fields.billing_status || cur.billing_status, note || 'status change');
   return { ok: true, billing: readBillingRow_(tenantId) };

@@ -144,7 +144,7 @@ function activationBlockers_(tenantId) {
   if (!goLive) blockers.push('settings.go_live_date が未設定');
   else if (!checkGoLiveDateNotPast_(goLive).ok && !hasSendHistory_(tenantId)) blockers.push(`settings.go_live_date(${goLive}) が過去日です。今日以降の日付に設定してください（過去の注文への一斉送信を防ぐため。送信実績のある稼働店の再開は対象外）`);
   if (getFollowDaysAfterShip_(tenantId) === null) blockers.push('settings.follow_days_after_ship が未設定/不正');
-  if (!billingDecision_(tenantId).allowed) blockers.push('課金ステータスが稼働可ではない（trial期間内 または active が必要）');
+  if (!billingDecision_(tenantId).allowed) blockers.push('課金ステータスが稼働可ではない（trial期間内 または active が必要。trial は申込完了時に起算。未起算なら set_billing の start_trial）');
   if (!getTenantTemplateRaw_(tenantId, 'follow_v1')) blockers.push('templates.follow_v1 が無い');
   return blockers;
 }

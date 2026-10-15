@@ -100,6 +100,7 @@ function onboardSubmit_(payload) {
   } catch (e) { Logger.log(`onboardSubmit_ settings skip [${tenantId}]: ${e.message}`); }
 
   verifyInvite_(payload.invite, true); // 使用済みに
+  try { startTrialIfPending_(tenantId); } catch (e) { Logger.log(`onboardSubmit_ trial start skip [${tenantId}]: ${e.message}`); }   // 無料期間は申込完了（接続テスト成功）時に起算
   setTenantPassword_(tenantId, String(payload.login_password));
   const token = issueTenantToken_(tenantId);
   notifyAdmin_(`[step-samurai] 店舗 ${tenantId}（${p('shop_name')}）がセルフ登録を完了しました。admin.html で内容を確認し、遡及取得→稼働化へ進めてください。`);

@@ -70,6 +70,16 @@ t('接続成功なら暗号化保存・招待は1回きり（再利用不可）�
   const token = r.token; assert.equal(ctx.verifyTenantToken_(token), TID);
   const own = ctx.getTenantSpreadsheet(ctx.verifyTenantToken_(token)); assert.notEqual(own.getId(), 'SS_TF');
   assert.ok(!JSON.stringify(own.getSheetByName('orders').rows).includes('240364')); });
+t('active 化: go_live_date が過去日なら送信実績が無い限りブロック、今日以降なら通る（既存値は触らない）', () => {
+  ctx.setTenantSettingValueAdmin_(TID, 'go_live_date', '2020-01-01');
+  assert.ok(ctx.activationBlockers_(TID).some(x => x.includes('過去日')));
+  ctx.setTenantSettingValueAdmin_(TID, 'go_live_date', '2099-01-01');
+  assert.ok(!ctx.activationBlockers_(TID).some(x => x.includes('過去日')));
+  // 送信実績のあるテナントの再開（過去の go_live_date のまま）はブロックしない
+  ctx.setTenantSettingValueAdmin_(TID, 'go_live_date', '2020-01-01');
+  const sh = books[master.rows.find(x => x[0] === TID)[2]].getSheetByName('sends'); sh.appendRow(['s1', 'o1', 'b1', 'follow', '2026-01-01 00:00:00', 'follow_v1', 'sent']);
+  assert.ok(!ctx.activationBlockers_(TID).some(x => x.includes('過去日')));
+  sh.rows.length = 1; ctx.setTenantSettingValueAdmin_(TID, 'go_live_date', ''); });
 t('顧客の課金 trial 期間内は稼働可、canceled に切替えると不可', () => {
   assert.equal(ctx.billingAllows_(TID), true); ctx.adminSetBilling_(TID, { billing_status: 'canceled' }); assert.equal(ctx.billingAllows_(TID), false); });
 t('後片付け: disabled → タブ・行・secrets・billing_events を削除し、全シートに e2etest が残らない', () => {

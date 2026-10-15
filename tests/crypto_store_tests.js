@@ -60,7 +60,8 @@ let invite;
 t('招待発行・検証', () => { invite = ctx.createInvite_('hanaya').invite; assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); assert.equal(ctx.verifyInvite_('wrong', false), null); assert.ok(!JSON.stringify(books.MASTER.sheets.invites.rows).includes(invite)); });
 t('onboard_check は秘密を返さない', () => { const r = ctx.onboardCheck_({ invite }); assert.equal(r.ok, true); assert.equal(r.tenant_id, 'hanaya'); assert.ok(!('token' in r)); });
 t('入力不足は保存しない', () => { const r = ctx.onboardSubmit_({ invite, sid: '123', shop_name: 'x' }); assert.equal(r.error, 'validation'); assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); });
-const good = { invite, sid: '123456', shop_name: '花屋', shop_email: 'h@example.jp', service_secret: 'SS', license_key: 'LK', license_expiry: '2027-09-01', smtp_user: 'smtpuser', smtp_pass: 'pw', follow_days: '4', go_live_date: '2026-10-01', login_password: 'hanaya-pass1' };
+const good = { invite, sid: '123456', shop_name: '花屋', shop_email: 'h@example.jp', service_secret: 'SS', license_key: 'LK', license_expiry: '2027-09-01', smtp_user: 'smtpuser', smtp_pass: 'pw', follow_days: '4', go_live_date: '2099-10-01', login_password: 'hanaya-pass1' };
+t('稼働開始希望日が過去日・不正な日付なら申込を受け付けない（招待は消費されない）', () => { ['2020-01-01', 'abc'].forEach(d => { const r = ctx.onboardSubmit_(Object.assign({}, good, { go_live_date: d })); assert.equal(r.error, 'validation'); assert.ok(r.fields.some(x => x.includes('稼働開始希望日'))); assert.equal(ctx.getTenantSecret_('hanaya', 'rms').secret.license_key, 'L2', '保存されない'); assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); }); const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); assert.ok(ctx.checkGoLiveDateNotPast_(today).ok, '当日は可'); });
 t('RMS 認証失敗なら保存せず招待も消費しない', () => { rmsCode = 401; const r = ctx.onboardSubmit_(good); assert.equal(r.error, 'rms_auth_failed'); assert.equal(ctx.getTenantSecret_('hanaya', 'smtp'), null); assert.equal(ctx.verifyInvite_(invite, false), 'hanaya'); rmsCode = 200; });
 t('成功時: 暗号化保存・settings反映・トークン発行・招待消費・運営者通知', () => {
   const r = ctx.onboardSubmit_(good); assert.equal(r.ok, true); assert.ok(r.token.length > 40);
@@ -68,7 +69,7 @@ t('成功時: 暗号化保存・settings反映・トークン発行・招待消�
   assert.equal(ctx.getTenantSecret_('hanaya', 'rms').meta.expiry, '2027-09-01');
   assert.equal(ctx.verifyInvite_(invite, false), null);
   assert.equal(ctx.verifyTenantToken_(r.token), 'hanaya');
-  assert.equal(settings.rows.find(x => x[0] === 'follow_days_after_ship')[1], '4'); assert.equal(settings.rows.find(x => x[0] === 'go_live_date')[1], '2026-10-01'); assert.equal(settings.rows.find(x => x[0] === 'dry_run')[1], 'true');
+  assert.equal(settings.rows.find(x => x[0] === 'follow_days_after_ship')[1], '4'); assert.equal(settings.rows.find(x => x[0] === 'go_live_date')[1], '2099-10-01'); assert.equal(settings.rows.find(x => x[0] === 'dry_run')[1], 'true');
   assert.equal(notified.length, 1);
   assert.ok(ctx.loginWithPassword_('hanaya', 'hanaya-pass1'), '登録したパスワードでログインできる'); assert.equal(ctx.loginWithPassword_('hanaya', 'wrong'), null); });
 t('credentialsStatus_ は秘密を含まない', () => { const s = JSON.stringify(ctx.credentialsStatus_('hanaya')); assert.ok(!s.includes('LK') && !s.includes('"pw"')); assert.ok(s.includes('sm****er')); });

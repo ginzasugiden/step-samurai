@@ -166,13 +166,19 @@ function sendPendingReviewThanks(tenantId) {
   if (!billingAllows_(tenantId)) return 0;   // 課金ガード（拒否理由は billingAllows_ がログ）
   const pending = collectPendingReviewThanks_(tenantId);
   Logger.log(`[${tenantId}] review_thanks: 対象 ${pending.targets.length}件 / skipped=${JSON.stringify(Object.keys(pending.skipped).reduce((o, k) => { o[k] = pending.skipped[k].length; return o; }, {}))}`);
+  const maxSends = getMaxSendsPerRun_(tenantId);   // 1回の実行の上限（既定50）。超過分は次回に回る（sends で冪等）
+  let attempted = 0, deferred = 0;
   pending.targets.forEach(order => {
+    if (attempted >= maxSends) { deferred++; return; }
     try {
-      sendReviewThanksMail(tenantId, order);
+      const r = sendReviewThanksMail(tenantId, order);
+      if (r && r.sent) attempted++;
     } catch (e) {
+      attempted++;
       Logger.log(`sendReviewThanksMail error [${order.order_number}]: ${e.message}`);
     }
   });
+  if (deferred) Logger.log(`[${tenantId}] review_thanks: 上限 ${maxSends} 件に達したため ${deferred} 件は次回以降に送信`);
   return pending.targets.length;
 }
 

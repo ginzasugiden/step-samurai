@@ -74,6 +74,7 @@ function onboardSubmit_(payload) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p('shop_email'))) errors.push('店舗メールアドレス');
   if (!p('service_secret') || !p('license_key')) errors.push('serviceSecret / licenseKey');
   if (p('license_expiry') && !toJstDateString_(p('license_expiry'))) errors.push('ライセンス有効期限の形式');
+  if (p('go_live_date') && !checkGoLiveDateNotPast_(p('go_live_date')).ok) errors.push('稼働開始希望日（今日以降の日付）');
   if (!p('smtp_user') || !p('smtp_pass'))        errors.push('あんしんメルアド SMTP ID / パスワード');
   if (String(payload.login_password || '').length < 8) errors.push('ログインパスワード（8文字以上）');
   if (errors.length) return { ok: false, error: 'validation', fields: errors };

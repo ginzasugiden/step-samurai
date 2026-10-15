@@ -60,7 +60,7 @@ console.log('パイプライン各経路の skip（canceled テナント）');
     fetchOrders: id => calls.push('fetchOrders:' + id), linkOrdersReviews: () => {}, sendPendingMails: id => calls.push('mails:' + id),
     evaluateCoupons: id => { calls.push('coupon:' + id); return []; }, notifyAdmin_: () => {}, isTenantDryRun_: () => true,
     collectPendingReviewThanks_: id => { calls.push('collect:' + id); return { targets: [], skipped: {} }; },
-    sendReviewThanksMail: () => {}, issueCoupon: () => null, findOrderByNumber_: () => null,
+    sendReviewThanksMail: () => {}, getMaxSendsPerRun_: () => 50, issueCoupon: () => null, findOrderByNumber_: () => null,
   });
   vm.createContext(c2);
   ['tenant.gs', 'billing.gs', 'main.gs'].forEach(f => vm.runInContext(load(f), c2, { filename: f }));

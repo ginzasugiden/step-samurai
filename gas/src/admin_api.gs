@@ -140,11 +140,22 @@ function activationBlockers_(tenantId) {
   if (!getTenantSecretMeta_(tenantId, 'smtp') && tenantId !== LEGACY_GLOBAL_FALLBACK_TENANT_) blockers.push('SMTP 認証が未登録（店舗のセルフ登録）');
   const t = listAllTenants_().find(x => x.tenant_id === tenantId);
   if (!t || !t.shop_email) blockers.push('マスターシートの shop_email が未設定');
-  if (!getTenantGoLiveDate_(tenantId)) blockers.push('settings.go_live_date が未設定');
+  const goLive = getTenantGoLiveDate_(tenantId);
+  if (!goLive) blockers.push('settings.go_live_date が未設定');
+  else if (!checkGoLiveDateNotPast_(goLive).ok && !hasSendHistory_(tenantId)) blockers.push(`settings.go_live_date(${goLive}) が過去日です。今日以降の日付に設定してください（過去の注文への一斉送信を防ぐため。送信実績のある稼働店の再開は対象外）`);
   if (getFollowDaysAfterShip_(tenantId) === null) blockers.push('settings.follow_days_after_ship が未設定/不正');
   if (!billingDecision_(tenantId).allowed) blockers.push('課金ステータスが稼働可ではない（trial期間内 または active が必要）');
   if (!getTenantTemplateRaw_(tenantId, 'follow_v1')) blockers.push('templates.follow_v1 が無い');
   return blockers;
+}
+
+/** sends に送信成功の行が1件でもあるか（稼働実績のあるテナントの再開と、初回 active 化を区別する） */
+function hasSendHistory_(tenantId) {
+  try {
+    const sh = getTenantSpreadsheet(tenantId).getSheetByName('sends');
+    if (!sh) return false;
+    return sh.getDataRange().getValues().slice(1).some(r => String(r[6]) === 'sent');
+  } catch (e) { return false; }
 }
 
 function adminSetStatus_(tenantId, status) {

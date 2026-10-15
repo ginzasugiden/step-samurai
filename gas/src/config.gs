@@ -486,8 +486,32 @@ const TENANT_SETTING_DEFS_ = [
   { key: 'review_thanks_since', value: '', description: 'レビューお礼メールの対象とするレビュー投稿日の下限(yyyy-MM-dd)。未設定なら送らない（過去レビューへの一斉送信を防ぐ）', editable: 'FALSE' },
   { key: 'review_thanks_min_rating', value: '3', description: 'レビューお礼メールを自動送信する最低評価（星）。これ未満の低評価は自動送信せずログに残す（個別対応推奨）', editable: 'TRUE' },
   { key: 'coupon_enabled', value: 'false', description: 'クーポン自動発行を有効にするか。true のテナントだけ発行する（未設定・false は発行しない＝fail-closed）', editable: 'FALSE' },
+  { key: 'max_sends_per_run', value: '', description: '1回（毎時）の実行で送るメールの上限件数。空なら既定50。上限に達した分は次回以降に回る', editable: 'FALSE' },
   { key: 'review_ingest_enabled', value: 'false', description: 'ECOS からのレビュー自動取込（Webhook ingest_reviews）を受け付けるか。false の間は受信を拒否する（fail-closed）', editable: 'FALSE' },
 ];
+
+const MAX_SENDS_PER_RUN_DEFAULT_ = 50;
+
+/** 1回の実行で送るメール数の上限（settings.max_sends_per_run。未設定・不正（1未満・非数）は既定50） */
+function getMaxSendsPerRun_(tenantId) {
+  const raw = getTenantSettingValue_(tenantId, 'max_sends_per_run');
+  const n = Number(raw);
+  if (raw === null || raw === '' || isNaN(n) || n < 1) return MAX_SENDS_PER_RUN_DEFAULT_;
+  return Math.floor(n);
+}
+
+/**
+ * 稼働開始日の入力検証（申込時・active 化時に使う）。空は empty、不正な日付は invalid、今日(JST)より前は past。
+ * 既存の保存値は検証しない（新規入力・active 化の前提確認にだけ使う）。
+ */
+function checkGoLiveDateNotPast_(value) {
+  if (!value) return { ok: false, error: 'empty' };
+  const d = toJstDateString_(value);
+  if (!d) return { ok: false, error: 'invalid' };
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  if (d < today) return { ok: false, error: 'past', date: d, today: today };
+  return { ok: true, date: d };
+}
 
 /** クーポン発行の有効化（settings.coupon_enabled が 'true' のときだけ true。未設定・タブ無しは false） */
 function isTenantCouponEnabled_(tenantId) {

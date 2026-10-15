@@ -200,9 +200,16 @@ function sendPendingMails(tenantId) {
 
   const excludedOrders = getTenantExcludedOrders_(tenantId);
 
+  // 1回の実行で送る上限（settings.max_sends_per_run、既定50）。超過分は次回以降に回る。送信済みは sends で冪等
+  const maxSends = getMaxSendsPerRun_(tenantId);
+  let attempted = 0, deferred = 0;
+  const sentSet = new Set(ss.getSheetByName('sends').getDataRange().getValues().slice(1)
+    .filter(r => r[3] === 'follow' && !String(r[6]).startsWith('error')).map(r => r[1]));
+
   data.slice(1).forEach(row => {
     if (!row[idx('order_number')]) return;
     const orderNumber = row[idx('order_number')];
+    if (sentSet.has(orderNumber)) return;
 
     if (excludedOrders.has(orderNumber)) {
       Logger.log(`[${tenantId}] sendPendingMails: EXCLUDE_ORDERS設定によりスキップ（一時措置） order=${orderNumber}`);
@@ -217,6 +224,8 @@ function sendPendingMails(tenantId) {
     const diffDays = Math.floor((now - new Date(shipDate)) / (1000 * 60 * 60 * 24));
     if (diffDays < followDays) return;
 
+    if (attempted >= maxSends) { deferred++; return; }
+
     const order = {
       order_number: row[idx('order_number')],
       masked_email: row[idx('masked_email')],
@@ -227,11 +236,13 @@ function sendPendingMails(tenantId) {
     };
 
     try {
-      sendFollowMail(tenantId, order);
+      if (sendFollowMail(tenantId, order)) attempted++;   // 実送信できたものだけ数える（dry_run は数えない）
     } catch(e) {
+      attempted++;                                         // 失敗も1回分に数える（同じ失敗を大量に繰り返さない）
       Logger.log(`sendFollowMail error [${order.order_number}]: ${e.message}`);
     }
   });
+  if (deferred) Logger.log(`[${tenantId}] sendPendingMails: 上限 ${maxSends} 件に達したため ${deferred} 件は次回以降に送信`);
 }
 
 function alreadySent_(sendsSheet, orderNumber, type) {

@@ -454,6 +454,43 @@ function getTenantExcludedOrders_(tenantId) {
   return set;
 }
 
+// ----- 店舗自身による除外注文の管理（店舗ログイン後の画面） -----
+// 操作できるのはセッション（トークン）から解決した自店の settings.exclude_orders だけ。tenant_id は引数で受けず、呼び出し側が渡す。
+const EXCLUDE_ORDER_PATTERN_ = /^\d{4,}-\d{8}-\d{4,}$/;   // 楽天の注文番号 <sid>-yyyyMMdd-<番号>
+const EXCLUDE_ORDERS_MAX_ = 500;
+
+/** settings.exclude_orders に登録済みの注文番号（店舗が管理する分のみ。旧グローバル EXCLUDE_ORDERS は含めない） */
+function listTenantExcludedOrders_(tenantId) {
+  return String(getTenantSettingValue_(tenantId, 'exclude_orders') || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/** 除外注文を1件追加/削除する。同時更新を避けるため ScriptLock を取る。戻り値 { ok, orders } か { ok:false, error } */
+function modifyTenantExcludedOrder_(tenantId, orderNumber, add) {
+  const on = String(orderNumber || '').trim();
+  if (!EXCLUDE_ORDER_PATTERN_.test(on)) return { ok: false, error: 'invalid_order_number' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, error: 'busy' };
+  try {
+    invalidateTenantConfigCache_(tenantId);   // 最新値を読んでから更新する
+    const cur = listTenantExcludedOrders_(tenantId);
+    const has = cur.indexOf(on) >= 0;
+    let next = cur;
+    if (add) {
+      if (!has) {
+        if (cur.length >= EXCLUDE_ORDERS_MAX_) return { ok: false, error: 'too_many_excluded_orders' };
+        next = cur.concat([on]);
+      }
+    } else if (has) {
+      next = cur.filter(x => x !== on);
+    }
+    if (next !== cur) {
+      const r = setTenantSettingValueAdmin_(tenantId, 'exclude_orders', next.join(','));
+      if (!r.ok) return r;
+    }
+    return { ok: true, orders: next };
+  } finally { lock.releaseLock(); }
+}
+
 /** テナントの署名上書き（settings.shop_signature_override）。空なら null */
 function getTenantSignatureOverride_(tenantId) {
   const raw = getTenantSettingValue_(tenantId, 'shop_signature_override');

@@ -146,6 +146,8 @@ async function loadAll() {
       : '取得できませんでした';
   } catch (e) { /* 認証情報表示は失敗してもログイン自体は継続させる */ }
 
+  await loadExcluded();
+
   try {
     const histRes = await callApi('get_history', {});
     if (histRes.ok) {
@@ -153,6 +155,44 @@ async function loadAll() {
     }
   } catch (e) { /* 履歴タブ表示は失敗してもログイン自体は継続させる */ }
 }
+
+// ===== 除外注文タブ =====
+// 操作対象はログイン中の店舗のみ（サーバ側がトークンから店舗を決める。ここから店舗IDは送らない）。表示は textContent のみ（HTML 挿入しない）。
+
+const EXCLUDED_ERRORS = { invalid_order_number: '注文番号の形式が正しくありません（例: 123456-20260101-0123456789）', too_many_excluded_orders: '登録できる件数の上限（500件）に達しています', busy: '他の操作と重なりました。少し待ってもう一度お試しください', unauthorized: 'ログインの有効期限が切れました。再ログインしてください' };
+
+function renderExcluded(orders) {
+  const tbody = document.querySelector('#excluded-table tbody');
+  tbody.textContent = '';
+  if (!orders.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 2; td.textContent = '登録されている除外注文はありません'; tr.appendChild(td); tbody.appendChild(tr); return; }
+  orders.forEach(on => {
+    const tr = document.createElement('tr'), td = document.createElement('td'), act = document.createElement('td'), btn = document.createElement('button');
+    td.textContent = on; btn.textContent = '除外を解除'; btn.className = 'secondary';
+    btn.addEventListener('click', () => changeExcluded('remove_excluded_order', on, btn));
+    act.appendChild(btn); tr.append(td, act); tbody.appendChild(tr);
+  });
+}
+
+function setExcludedMsg(text) { const el = document.getElementById('excluded-msg'); el.textContent = text || ''; el.hidden = !text; }
+
+async function loadExcluded() {
+  try { const r = await callApi('get_excluded_orders', {}); if (r.ok) renderExcluded(r.orders || []); } catch (e) { /* 取得に失敗してもログインは継続 */ }
+}
+
+async function changeExcluded(action, orderNumber, btn) {
+  btn.disabled = true; setExcludedMsg('');
+  try {
+    const r = await callApi(action, { order_number: orderNumber });
+    if (r.ok) { renderExcluded(r.orders || []); if (action === 'add_excluded_order') document.getElementById('excluded-input').value = ''; setExcludedMsg(action === 'add_excluded_order' ? '追加しました' : '解除しました'); }
+    else setExcludedMsg(EXCLUDED_ERRORS[r.error] || ('失敗しました: ' + r.error));
+  } catch (e) { setExcludedMsg('通信エラー: ' + e.message); } finally { btn.disabled = false; }
+}
+
+document.getElementById('excluded-add-btn').addEventListener('click', () => {
+  const v = document.getElementById('excluded-input').value.trim();
+  if (!v) { setExcludedMsg('注文番号を入力してください'); return; }
+  changeExcluded('add_excluded_order', v, document.getElementById('excluded-add-btn'));
+});
 
 // ===== 設定タブ =====
 

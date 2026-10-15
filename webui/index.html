@@ -43,6 +43,7 @@
     <button class="tab-btn" data-tab="templates">文面</button>
     <button class="tab-btn" data-tab="test">テスト送信</button>
     <button class="tab-btn" data-tab="history">履歴</button>
+    <button class="tab-btn" data-tab="excluded">除外注文</button>
     <button class="tab-btn" data-tab="reviews">レビュー取込</button>
     <button class="tab-btn" data-tab="credentials">認証情報</button>
     <a class="tab-link" href="analytics.html">店舗分析 ↗</a>
@@ -78,6 +79,17 @@
       <div class="table-wrap"><table id="sends-table"><thead></thead><tbody></tbody></table></div>
       <h3>クーポン発行</h3>
       <div class="table-wrap"><table id="coupons-table"><thead></thead><tbody></tbody></table></div>
+    </section>
+    <section id="tab-excluded" class="tab-panel">
+      <h2>除外注文（配信停止）</h2>
+      <p class="hint">
+        配信停止のご要望があったお客様の注文番号を登録すると、その注文にはフォローメール・レビューお礼メールを送りません。
+        注文番号は楽天の「<code>店舗ID-日付-番号</code>」形式です（例: <code>123456-20260101-0123456789</code>）。すでに送信済みのメールは取り消せません。
+      </p>
+      <input id="excluded-input" type="text" placeholder="注文番号" maxlength="40" autocomplete="off">
+      <button id="excluded-add-btn">除外に追加</button>
+      <p id="excluded-msg" class="hint" hidden></p>
+      <div class="table-wrap"><table id="excluded-table"><thead><tr><th>注文番号</th><th></th></tr></thead><tbody></tbody></table></div>
     </section>
     <section id="tab-reviews" class="tab-panel">
       <h2>レビューCSVの取込</h2>

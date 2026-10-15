@@ -105,6 +105,16 @@ function handleTenantAction_(req) {
       case 'update_smtp':
         return jsonResponse_(updateSmtp_(tenantId, payload));
 
+      case 'get_excluded_orders':
+        // 自店の除外注文（settings.exclude_orders）。tenant_id は payload を見ず、トークンから解決したものだけを使う
+        return jsonResponse_({ ok: true, orders: listTenantExcludedOrders_(tenantId) });
+
+      case 'add_excluded_order':
+        return jsonResponse_(modifyTenantExcludedOrder_(tenantId, payload.order_number, true));
+
+      case 'remove_excluded_order':
+        return jsonResponse_(modifyTenantExcludedOrder_(tenantId, payload.order_number, false));
+
       case 'import_reviews_preview':
         // レビューCSV（RMSレビューチェックツールのダウンロード）を解析して件数と先頭数行を返す。書き込まない
         return jsonResponse_(importReviewsFromCsv_(tenantId, String(payload.csv || ''), true));

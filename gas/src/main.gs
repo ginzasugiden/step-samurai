@@ -104,20 +104,43 @@ function runLicenseCheck() {
   checkLicenseExpiry();
 }
 
-// 初回手動実行：トリガー登録
+/**
+ * このスクリプトが管理するトリガー（冪等に登録する対象）。ここに無いハンドラのトリガーは触らない。
+ * runPipeline（クーポン経路を含む）は GO_LIVE.md のとおり登録しない。
+ */
+const MANAGED_TRIGGERS_ = [
+  { handler: 'runHourlyFollowPipeline', build: b => b.timeBased().everyHours(1) },
+  { handler: 'checkBillingDaily',       build: b => b.timeBased().everyDays(1).atHour(9) },
+];
+
+/**
+ * 既存トリガーのハンドラ名一覧から、作るべきもの・重複して消すべきものを決める（純粋関数）。
+ * 管理対象ごとに 0 本なら create、2 本以上なら 1 本目を残して残りを dedupe（インデックスで返す）。管理対象外は何もしない。
+ */
+function planManagedTriggers_(existingHandlers, managed) {
+  const plan = { create: [], dedupe: [], keep: [] };
+  managed.forEach(m => {
+    const idxs = [];
+    existingHandlers.forEach((h, i) => { if (h === m.handler) idxs.push(i); });
+    if (!idxs.length) plan.create.push(m.handler);
+    else { plan.keep.push(m.handler); idxs.slice(1).forEach(i => plan.dedupe.push(i)); }
+  });
+  return plan;
+}
+
+/**
+ * トリガーの登録（GAS エディタから手動で1回実行。何度実行しても結果は同じ）。
+ * 管理対象（MANAGED_TRIGGERS_）が未登録なら作成し、重複していれば1本に減らす。それ以外のトリガーは削除しない。
+ * 既存の管理対象トリガーは作り直さない（実行時刻が変わらない）。
+ */
 function setupTriggers() {
-  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-
-  ScriptApp.newTrigger('runPipeline')
-    .timeBased().everyHours(1).create();
-
-  ScriptApp.newTrigger('runLicenseCheck')
-    .timeBased().everyDays(1).atHour(9).create();
-
-  ScriptApp.newTrigger('runMonthlyReport')
-    .timeBased().onMonthDay(1).atHour(8).create();
-
-  Logger.log('トリガー登録完了');
+  const existing = ScriptApp.getProjectTriggers();
+  const plan = planManagedTriggers_(existing.map(t => t.getHandlerFunction()), MANAGED_TRIGGERS_);
+  plan.dedupe.forEach(i => ScriptApp.deleteTrigger(existing[i]));
+  plan.create.forEach(h => MANAGED_TRIGGERS_.find(m => m.handler === h).build(ScriptApp.newTrigger(h)).create());
+  const after = ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction());
+  Logger.log(`setupTriggers: 作成=${JSON.stringify(plan.create)} 重複削除=${plan.dedupe.length}件 維持=${JSON.stringify(plan.keep)} / 現在のトリガー=${JSON.stringify(after)}`);
+  return { created: plan.create, deduped: plan.dedupe.length, kept: plan.keep, triggers: after };
 }
 
 // 管理者通知（メール）

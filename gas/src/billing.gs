@@ -278,19 +278,54 @@ function seedBillingInitial() {
 
 // ===== 日次チェック（トリガー登録は人間ゲート） =====
 
-/** trial_end 超過を検知して billing_note に「trial期限切れ」を記録する。ステータスは自動変更しない */
+/**
+ * trial_end 超過を検知して billing_note に「trial期限切れ」を記録する。ステータスは自動変更しない。
+ * あわせて ADMIN_EMAIL 宛てに、期限7日前・当日・期限切れ（今回初めて検知）の一覧を1通にまとめて送る。
+ */
 function checkBillingDaily() {
-  const today = billingToday_(), flagged = [];
+  const today = billingToday_(), flagged = [], digest = { before7: [], today: [], expired: [] };
+  const in7 = addDaysStr_(today, 7);
   listAllTenants_().forEach(t => {
     const b = readBillingRow_(t.tenant_id);
-    if (!b || b.billing_status !== 'trial' || !b.trial_end || b.trial_end >= today) return;
+    if (!b || b.billing_status !== 'trial' || !b.trial_end) return;
+    const item = { tenant_id: t.tenant_id, shop_name: t.shop_name, trial_end: b.trial_end };
+    if (b.trial_end === in7) digest.before7.push(item);
+    if (b.trial_end === today) digest.today.push(item);
+    if (b.trial_end >= today) return;
     if (b.billing_note.indexOf('trial期限切れ') >= 0) return;
     writeBillingFields_(t.tenant_id, { billing_note: `${b.billing_note ? b.billing_note + ' | ' : ''}trial期限切れ(${b.trial_end})` });
     appendBillingEvent_(t.tenant_id, 'system', 'trial_expired_flag', 'trial', 'trial', `trial_end=${b.trial_end}`);
     flagged.push(t.tenant_id);
+    digest.expired.push(item);
   });
   Logger.log(`checkBillingDaily: ${flagged.length}件に trial期限切れ を記録 ${JSON.stringify(flagged)}`);
+  try { sendTrialDigest_(today, digest); } catch (e) { Logger.log(`checkBillingDaily digest error: ${e.message}`); }
   return flagged;
+}
+
+const TRIAL_DIGEST_EVENT_ = 'trial_digest_sent';
+
+/**
+ * trial 期限の一覧メール。対象が無ければ何もしない。同じ日に2回目は送らない（billing_events の trial_digest_sent で判定）。
+ * ADMIN_EMAIL が未設定なら送らず、内容をログに出すだけ（記録もしない）。戻り値: 'sent' | 'none' | 'duplicate' | 'no_admin_email'
+ */
+function sendTrialDigest_(today, digest) {
+  const total = digest.before7.length + digest.today.length + digest.expired.length;
+  if (!total) return 'none';
+  const lines = [];
+  const section = (title, items) => { if (!items.length) return; lines.push(`■ ${title}（${items.length}件）`); items.forEach(i => lines.push(`  ・${i.tenant_id}（${i.shop_name}）trial_end=${i.trial_end}`)); lines.push(''); };
+  section('無料期間が7日後に終わります', digest.before7);
+  section('無料期間が今日で終わります（明日から送信停止）', digest.today);
+  section('無料期間が終了し、送信を停止しています', digest.expired);
+  lines.push('対応: 請求書を発行し、入金確認後に admin.html で billing_status を active にしてください。');
+  const body = lines.join('\n');
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL');
+  if (!adminEmail) { Logger.log(`sendTrialDigest_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return 'no_admin_email'; }
+  const seen = getBillingEventsSheet_().getDataRange().getValues().slice(1).some(r => String(r[4]) === TRIAL_DIGEST_EVENT_ && String(r[7]).indexOf(today) === 0);
+  if (seen) { Logger.log('sendTrialDigest_: 本日分は送信済みのためスキップ'); return 'duplicate'; }
+  MailApp.sendEmail(adminEmail, `[step-samurai] 無料トライアルの期限のお知らせ（${total}件）`, body);
+  appendBillingEvent_('', 'system', TRIAL_DIGEST_EVENT_, '', '', `${today} 7日前=${digest.before7.length} 当日=${digest.today.length} 期限切れ=${digest.expired.length}`);
+  return 'sent';
 }
 
 // ===== fincode Webhook（doPost action=fincode_webhook） =====

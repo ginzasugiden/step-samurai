@@ -32,6 +32,8 @@ const ctx = base(); vm.createContext(ctx);
 
 
 // MailApp はモック（実メールは送らない）
+// 毎時処理の外部チェック（checkHourlyHealth_）は別テスト（monitor_tests.js）で検証。ここでは trial 通知の件数だけを見るため無効化
+ctx.checkHourlyHealth_ = () => 'ok';
 const mails = [];
 ctx.MailApp = { sendEmail: (to, subject, body) => { mails.push({ to, subject, body }); } };
 

@@ -127,9 +127,10 @@ t('billing skip と hourly_done が pipeline_log に記録される', () => {
   assert.deepEqual(Array.from(pl.rows[0]), ['tenant_id', 'event', 'detail', 'at']);
   assert.ok(pl.rows.some(r => r[0] === 'cancelshop' && r[1] === 'billing_skip'));
   assert.ok(pl.rows.some(r => r[0] === 'tokyoflower' && r[1] === 'hourly_done')); });
-t('直近200行でローテーションする（古い行から削除）', () => {
+t('pipelineLog_ 自体は行を削除しない（整理は prunePipelineLog_ が日次で行う）', () => {
+  const before = books.MASTER.sheets.pipeline_log.rows.length;
   for (let i = 0; i < 260; i++) ctx.pipelineLog_('rot', 'e', 'n' + i);
-  const pl = books.MASTER.sheets.pipeline_log; assert.equal(pl.rows.length, 201); assert.equal(pl.rows[200][2], 'n259'); assert.ok(!pl.rows.some(r => r[2] === 'n0')); });
+  const pl = books.MASTER.sheets.pipeline_log; assert.equal(pl.rows.length, before + 260); assert.ok(pl.rows.some(r => r[2] === 'n0')); });
 t('シート書込に失敗しても本処理へ例外を出さない', () => { const orig = ctx.getMasterWorkbook_; ctx.getMasterWorkbook_ = () => { throw new Error('boom'); }; assert.doesNotThrow(() => ctx.pipelineLog_('x', 'y', 'z')); ctx.getMasterWorkbook_ = orig; });
 
 console.log('seedBillingInitial（初回リリース）');

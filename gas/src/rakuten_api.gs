@@ -19,7 +19,7 @@ function getRmsAuthHeader_(tenantId) {
 // そのため「直近7日に出荷完了報告された注文」(dateType:5) も併せて取得しマージする。
 function fetchOrders(tenantId) {
   // 分析用列（order_datetime 等）が無ければ末尾に追加（冪等・軽量）。失敗しても受注取得は続行する。
-  try { ensureAnalyticsColumns_(tenantId); } catch (e) { Logger.log(`fetchOrders: ensureAnalyticsColumns_ skip: ${e.message}`); }
+  try { ensureAnalyticsColumns_(tenantId); } catch (e) { Logger.log(`fetchOrders: ensureAnalyticsColumns_ skip: ${e.message}`); tenantWarn_(tenantId, 'ensureAnalyticsColumns_', e.message); }
 
   const ss     = getTenantSpreadsheet(tenantId);
   const sheet  = ss.getSheetByName('orders');
@@ -48,6 +48,7 @@ function fetchOrders(tenantId) {
     if (n > 0) Logger.log(`fetchOrders [${tenantId}]: キャンセル同期 ${n}件`);
   } catch (e) {
     Logger.log(`fetchOrders: syncCancelledOrders_ skip: ${e.message}`);
+    tenantWarn_(tenantId, 'syncCancelledOrders_', e.message);
   }
 
   // purchase_count は upsert 後に全行再計算（キャンセル同期の結果も反映される）

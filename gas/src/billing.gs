@@ -160,9 +160,12 @@ function billingAllows_(tenantId) {
   return d.allowed;
 }
 
-// ===== pipeline_log（監視用。マスターシート pipeline_log タブ・直近200行） =====
+// ===== pipeline_log（監視用。マスターシート pipeline_log タブ。14日・上限5,000行で保持。整理は checkBillingDaily 内で1日1回） =====
 const PIPELINE_LOG_SHEET_ = 'pipeline_log';
-const PIPELINE_LOG_MAX_ROWS_ = 200;
+const PIPELINE_LOG_RETAIN_DAYS_ = 14;
+const PIPELINE_LOG_HARD_MAX_ROWS_ = 5000;
+const PIPELINE_LOG_BACKUP_SHEET_ = 'pipeline_log_bak_20261016';
+const PIPELINE_LOG_PRUNED_KEY_ = 'PIPELINE_LOG_PRUNED_DATE';
 
 /** console.error を安全に呼ぶ（console が無い環境・失敗でも例外を出さない） */
 function consoleError_(msg) {
@@ -179,8 +182,6 @@ function pipelineLog_(tenantId, event, detail) {
     let sh = ss.getSheetByName(PIPELINE_LOG_SHEET_);
     if (!sh) { sh = ss.insertSheet(PIPELINE_LOG_SHEET_); sh.appendRow(['tenant_id', 'event', 'detail', 'at']); }
     sh.appendRow([tenantId, event, String(detail || '').substring(0, 200), billingNowStr_()]);
-    const excess = sh.getLastRow() - 1 - PIPELINE_LOG_MAX_ROWS_;
-    if (excess > 0) sh.deleteRows(2, excess);
     return true;
   } catch (e) {
     Logger.log(`pipelineLog_ skip: ${e.message}`);
@@ -200,6 +201,130 @@ function readHourlyLogRows_() {
   return sh.getDataRange().getValues().slice(1)
     .filter(r => String(r[0]) === '_hourly')
     .map(r => ({ event: String(r[1]), detail: String(r[2]), at: r[3] }));
+}
+
+/** pipeline_log の at（'yyyy-MM-dd HH:mm:ss' JST の文字列、またはシートが変換した Date）をミリ秒に。解釈できなければ NaN */
+function pipelineAtMs_(v) {
+  if (v instanceof Date) return v.getTime();
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(v || ''));
+  return m ? Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+09:00`) : NaN;
+}
+
+function pipelineAtStr_(v) {
+  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss') : String(v);
+}
+
+// ===== tenant_warn（テナント単位の警告。処理は止めない。同じ run・テナント・stage は1行にまとめる） =====
+let TENANT_WARN_RUN_ = '';
+let TENANT_WARN_SEEN_ = {};
+
+/** runHourlyFollowPipeline の開始時に呼ぶ（現在の run ID を設定し、記録済みキーをリセット） */
+function tenantWarnReset_(runId) { TENANT_WARN_RUN_ = String(runId || ''); TENANT_WARN_SEEN_ = {}; }
+
+/** pipeline_log に tenant_warn を1行。例外は握りつぶす（console.error）。戻り値: 書き込めたら true */
+function tenantWarn_(tenantId, stage, msg) {
+  try {
+    const key = `${TENANT_WARN_RUN_}|${tenantId}|${stage}`;
+    if (TENANT_WARN_SEEN_[key]) return false;
+    TENANT_WARN_SEEN_[key] = true;
+    return pipelineLog_(tenantId, 'tenant_warn', `run=${TENANT_WARN_RUN_ || '-'} stage=${stage} msg=${msg}`);
+  } catch (e) {
+    consoleError_(`tenantWarn_ failed (${tenantId}/${stage}): ${e.message}`);
+    return false;
+  }
+}
+
+// ===== 毎時処理の外部チェック（checkBillingDaily から1日1回） =====
+/** 最新の hourly_start がこの分数以上前なら「停止」とみなす */
+const HOURLY_HEALTH_STALE_MIN_ = 180;
+const HOURLY_HEALTH_EVENT_ = 'hourly_health_alert';
+
+/** pipeline_log の全行を古い順に返す（失敗時は例外。タブが無ければ空配列） */
+function readPipelineLogAll_() {
+  const sh = getMasterWorkbook_().getSheetByName(PIPELINE_LOG_SHEET_);
+  if (!sh) return [];
+  return sh.getDataRange().getValues().slice(1).map(r => ({ tenant: String(r[0]), event: String(r[1]), detail: String(r[2]), at: r[3] }));
+}
+
+/**
+ * 毎時処理が止まっているかの判定（純粋関数）。rows は readPipelineLogAll_ 形式。
+ * stale: 最新の _hourly/hourly_start が 180分以上前、または hourly_start が無い。
+ */
+function judgeHourlyHealth_(rows, nowMs, todayStr) {
+  const out = { stale: false, noStart: false, lastStart: '', minAgo: null, lastError: '', incomplete: 0, gap: 0, alertedToday: false };
+  let lastMs = NaN;
+  rows.forEach(r => {
+    const ms = pipelineAtMs_(r.at), hourly = r.tenant === '_hourly';
+    if (hourly && r.event === 'hourly_start' && !isNaN(ms) && (isNaN(lastMs) || ms > lastMs)) { lastMs = ms; out.lastStart = pipelineAtStr_(r.at); }
+    if (r.event === 'hourly_error') out.lastError = r.detail;
+    if (hourly && r.event === 'hourly_incomplete') out.incomplete++;
+    if (hourly && r.event === 'hourly_gap') out.gap++;
+    if (hourly && r.event === HOURLY_HEALTH_EVENT_ && !isNaN(ms) && Utilities.formatDate(new Date(ms), 'Asia/Tokyo', 'yyyy-MM-dd') === todayStr) out.alertedToday = true;
+  });
+  if (isNaN(lastMs)) { out.stale = true; out.noStart = true; return out; }
+  out.minAgo = Math.round((nowMs - lastMs) / 60000);
+  out.stale = out.minAgo >= HOURLY_HEALTH_STALE_MIN_;
+  return out;
+}
+
+/**
+ * 日次の外部チェック。毎時処理が止まっていれば ADMIN_EMAIL に通知（同日重複なし）。
+ * 戻り値: 'ok' | 'stale_no_admin_email' | 'duplicate' | 'sent' | 'send_failed'
+ */
+function checkHourlyHealth_() {
+  const nowMs = pipelineAtMs_(billingNowStr_());
+  const today = Utilities.formatDate(new Date(nowMs), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const j = judgeHourlyHealth_(readPipelineLogAll_(), nowMs, today);
+  if (!j.stale) return 'ok';
+  const body = [
+    j.noStart ? '毎時処理の開始記録（hourly_start）が pipeline_log に1件もありません。停止しているものとして通知します。'
+      : `最終 hourly_start: ${j.lastStart}（${j.minAgo}分前。${HOURLY_HEALTH_STALE_MIN_}分以上で通知）`,
+    `直近の hourly_error: ${j.lastError || '(なし)'}`,
+    `hourly_incomplete 件数: ${j.incomplete}（pipeline_log に残っている範囲）`,
+    `hourly_gap 件数: ${j.gap}（pipeline_log に残っている範囲）`,
+    '', 'マスターシートの pipeline_log タブと、GAS のトリガー（runHourlyFollowPipeline）を確認してください。'].join('\n');
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL');
+  if (!adminEmail) { Logger.log(`checkHourlyHealth_: ADMIN_EMAIL 未設定のため通知せず。内容:\n${body}`); return 'stale_no_admin_email'; }
+  if (j.alertedToday) { Logger.log('checkHourlyHealth_: 本日分は通知済みのためスキップ'); return 'duplicate'; }
+  try { MailApp.sendEmail(adminEmail, '[step-samurai] 毎時処理が止まっています', body); }
+  catch (e) { Logger.log(`checkHourlyHealth_ send failed: ${e.message}`); consoleError_(`checkHourlyHealth_ send failed: ${e.message}`); return 'send_failed'; }
+  pipelineLog_('_hourly', HOURLY_HEALTH_EVENT_, j.noStart ? 'no_hourly_start' : `last_start=${j.lastStart} min_ago=${j.minAgo}`);
+  return 'sent';
+}
+
+/**
+ * pipeline_log の整理（checkBillingDaily から。1日1回）。
+ * (a) バックアップタブ作成（失敗したら一切削除しない） (b) 14日より前の先頭連続ブロックを削除
+ * (c) 5,000行超過分を古い順に削除（バックアップを今回新規作成した「初回」は行わない）。結果はログのみ。
+ */
+function prunePipelineLog_() {
+  const props = PropertiesService.getScriptProperties();
+  const nowMs = pipelineAtMs_(billingNowStr_());
+  const today = Utilities.formatDate(new Date(nowMs), 'Asia/Tokyo', 'yyyy-MM-dd');
+  if (props.getProperty(PIPELINE_LOG_PRUNED_KEY_) === today) return { skipped: 'already_today' };
+  const ss = getMasterWorkbook_(), sh = ss.getSheetByName(PIPELINE_LOG_SHEET_);
+  if (!sh) return { skipped: 'no_sheet' };
+  let created = false;
+  if (!ss.getSheetByName(PIPELINE_LOG_BACKUP_SHEET_)) {
+    let copy = null;
+    try { copy = sh.copyTo(ss); copy.setName(PIPELINE_LOG_BACKUP_SHEET_); created = true; }
+    catch (e) {
+      try { if (copy) ss.deleteSheet(copy); } catch (e2) { /* ignore */ }
+      Logger.log(`prunePipelineLog_: バックアップ作成に失敗したため整理しない: ${e.message}`);
+      consoleError_(`prunePipelineLog_ backup failed: ${e.message}`);
+      return { skipped: 'backup_failed' };
+    }
+  }
+  const cutoff = nowMs - PIPELINE_LOG_RETAIN_DAYS_ * 86400000;
+  const data = sh.getDataRange().getValues();
+  let old = 0;
+  for (let i = 1; i < data.length; i++) { const ms = pipelineAtMs_(data[i][3]); if (!isNaN(ms) && ms < cutoff) old++; else break; }
+  if (old > 0) sh.deleteRows(2, old);
+  let over = 0;
+  if (!created) { over = Math.max(0, sh.getLastRow() - 1 - PIPELINE_LOG_HARD_MAX_ROWS_); if (over > 0) sh.deleteRows(2, over); }
+  props.setProperty(PIPELINE_LOG_PRUNED_KEY_, today);
+  Logger.log(`prunePipelineLog_: 期間外 ${old}件・上限超過 ${over}件を削除（バックアップ ${created ? '新規作成' : '既存'}: ${PIPELINE_LOG_BACKUP_SHEET_}）`);
+  return { backup_created: created, deleted_old: old, deleted_over: over };
 }
 
 // ===== テナント作成時 / 手動切替 =====
@@ -326,6 +451,8 @@ function checkBillingDaily() {
   });
   Logger.log(`checkBillingDaily: ${flagged.length}件に trial期限切れ を記録 ${JSON.stringify(flagged)}`);
   try { sendTrialDigest_(today, digest); } catch (e) { Logger.log(`checkBillingDaily digest error: ${e.message}`); }
+  try { checkHourlyHealth_(); } catch (e) { Logger.log(`checkBillingDaily hourly health error: ${e.message}`); consoleError_(`checkHourlyHealth_ failed: ${e.message}`); }
+  try { prunePipelineLog_(); } catch (e) { Logger.log(`checkBillingDaily prune error: ${e.message}`); consoleError_(`prunePipelineLog_ failed: ${e.message}`); }
   return flagged;
 }
 

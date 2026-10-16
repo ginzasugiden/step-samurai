@@ -40,11 +40,32 @@
 - `hourly_incomplete` — 開始時に「前回の `hourly_start` に対する終了マーカー（done / error / skip）が無い」ことを検知した（`prev=<前回のrun> prev_start=<時刻>`）。実行が途中で止まった（時間切れ・GAS側の強制停止など）可能性。
 - `hourly_gap` — 前回の `hourly_start` から **90分超**空いて開始した（`gap_min=<分>`）。トリガーが発火しなかった・止まっていた可能性。毎時トリガーの揺らぎを見込んだ閾値（`HOURLY_GAP_THRESHOLD_MIN_`）。
 - `hourly_alert` — `ADMIN_EMAIL` へ異常通知を送った記録。
+- `hourly_health_alert` — 日次の外部チェックが「毎時処理が止まっている」通知を送った記録（下記）。
+- `tenant_warn` — テナント単位の警告（`tenant_id` はそのテナント）。下記。
 
 見方: 正常なら **`hourly_start` と `hourly_done`（または `hourly_skip` / `hourly_error`）が同じ run ID で対**になる。`incomplete` は「始まったのに終わっていない」（実行はされた）、`gap` は「そもそも始まっていない時間がある」（発火漏れ）で、別の異常。両方が同時に出ることもある。
 - 通知条件: 今回の開始時に `incomplete` または `gap` を検知し、**かつ前回の実行の開始時にも検知されていた（2回連続）** ときだけ `ADMIN_EMAIL` に通知する。通知は **1日1回まで**（同日に `hourly_alert` があれば送らない）。`ADMIN_EMAIL` 未設定の場合は送らず実行ログに出すだけ（`hourly_alert` も残さない）。1回だけの異常は行が残るのみで通知しない。
-- `pipeline_log` は **直近200行**で古い行から削除される。毎時1回あたり `_hourly` は最低2行（start + done）増え、テナント別の行も加わるため、**数日分しか遡れない**。調べるときは早めに見ること（異常時は incomplete / gap / alert でさらに増える）。
+- `pipeline_log` は **14日間・最大5,000行**で保持される（下記「保持期間」）。書き込みのたびに行を削除することはない。
 - 記録の書き込み自体が失敗しても実行は止まらず、実行ログ（GAS の実行数・Cloud ログ）に `pipelineLog_ failed` が出る。前回状態を読めない場合はその回の検知を省略して続行する。
+
+### tenant_warn の見方
+処理は止まらないが失敗した段階を、テナント単位で `pipeline_log` に残す（`event=tenant_warn`、`detail=run=<実行ID> stage=<段階> msg=<内容>`）。同じ回（run）・同じテナント・同じ `stage` は1行にまとめる。`stage` は次の3つ:
+- `sendPendingReviewThanks` — レビューお礼メールの失敗（`hourly_done` の `errors` にも数えられ、従来どおり `ADMIN_EMAIL` にも通知）。
+- `ensureAnalyticsColumns_` — 分析用列の追加失敗（受注取得は続行）。
+- `syncCancelledOrders_` — キャンセル注文の同期失敗（受注取得・メール送信は続行）。
+毎時の `hourly_done` が出ていても、テナント別の `tenant_warn` が出ていれば一部が失敗している。同じ `stage` が毎回出続けるテナントを優先して確認する。
+
+### 日次の外部チェック（毎時処理の停止検知）
+`checkBillingDaily`（毎日9時）の最後に、`_hourly` の最新の `hourly_start` を確認する。**3時間（180分）以上前**、または `hourly_start` が1件も無い場合は「停止」とみなし、`ADMIN_EMAIL` に「[step-samurai] 毎時処理が止まっています」を送る。本文は最終 `hourly_start` の時刻・直近の `hourly_error` の内容・`hourly_incomplete` / `hourly_gap` の件数（`pipeline_log` に残っている範囲）。
+- 送信できたら `_hourly` / `hourly_health_alert` を記録し、**同じ日に2回は送らない**。3時間未満の正常時は何も送らず何も記録しない。
+- `ADMIN_EMAIL` 未設定なら実行ログに出すだけ（記録もしない）。メール送信に失敗したら記録せず、翌日の実行で再判定する。
+- このチェックが例外になっても `checkBillingDaily` 本体（trial 期限切れの記録・一覧メール）には影響しない。毎時処理側の検知（上記 `hourly_alert`）とは独立した外部の見張り。
+
+### 保持期間と整理
+- 保持は **14日間・最大5,000行**。整理は `checkBillingDaily` の中で**1日1回だけ**実行する（Script Properties `PIPELINE_LOG_PRUNED_DATE` に実行日(JST)を保存し、同日2回目は何もしない）。14日より前の古い行を消し、5,000行を超えた分は古い順に消す。ヘッダ行は消さない。`at` を解釈できない行は残す。
+- 整理の前に、マスターシートにバックアップタブ **`pipeline_log_bak_20261016`** を作って `pipeline_log` を複製する（すでにあれば複製しない＝上書きしない）。複製に失敗した場合は何も削除しない。バックアップを新規作成した最初の回は、14日規則のみ適用し5,000行規則は適用しない。
+- 整理の結果（削除件数・バックアップ有無）は実行ログ（`prunePipelineLog_:` で始まる行）のみに出て、`pipeline_log` には行を追加しない。
+- **復元は人の作業**: 自動では戻さない。必要なら `pipeline_log_bak_20261016` から該当行を手作業で `pipeline_log` に戻す。バックアップタブは不要になったら人が削除する（コードは削除しない）。
 
 ## 5. fincode（審査完了後に有効化）
 - 仕様（確認元 https://docs.fincode.jp/develop_support/development_monitoring / https://docs.fincode.jp/api の Webhook_通知仕様）: 認証は `Fincode-Signature` ヘッダ（Webhook 登録時に設定した署名値と同一の固定文字列）、応答は HTTP200・text/plain・`0`。一意な event_id は無いため PHP が合成。

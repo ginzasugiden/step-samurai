@@ -133,6 +133,7 @@ function runHourlyFollowPipeline() {
   const runId = Utilities.getUuid().replace(/-/g, '').substring(0, 8);
   const stats = { tenants: 0, ran: 0, billing_skipped: 0, errors: 0 };
   let stage = 'detect';
+  tenantWarnReset_(runId);
   try {
     detectHourlyAnomalies_(runId, hourlyNow_());
     pipelineLog_(HOURLY_LOG_ID_, 'hourly_start', `run=${runId}`);   // 失敗しても処理は止めない
@@ -161,6 +162,7 @@ function runHourlyFollowPipeline() {
         } catch(e) {
           stats.errors++;
           Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`);
+          tenantWarn_(tenant.tenant_id, 'sendPendingReviewThanks', e.message);
           notifyAdminSafe_(`[step-samurai] ${tenant.tenant_id} レビューお礼メールエラー: ${e.message}`);
         }
         Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline done`);

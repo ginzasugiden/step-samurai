@@ -164,7 +164,15 @@ function billingAllows_(tenantId) {
 const PIPELINE_LOG_SHEET_ = 'pipeline_log';
 const PIPELINE_LOG_MAX_ROWS_ = 200;
 
-/** 実行ログをシートにも残す。失敗しても本処理へは影響させない（例外は握りつぶしてログのみ） */
+/** console.error を安全に呼ぶ（console が無い環境・失敗でも例外を出さない） */
+function consoleError_(msg) {
+  try { if (typeof console !== 'undefined' && console.error) console.error(msg); } catch (e) { /* ignore */ }
+}
+
+/**
+ * 実行ログをシートにも残す。失敗しても本処理へは例外を出さない（Logger.log と console.error に残す）。
+ * 戻り値: 書き込み成功なら true、失敗なら false。
+ */
 function pipelineLog_(tenantId, event, detail) {
   try {
     const ss = getMasterWorkbook_();
@@ -173,7 +181,25 @@ function pipelineLog_(tenantId, event, detail) {
     sh.appendRow([tenantId, event, String(detail || '').substring(0, 200), billingNowStr_()]);
     const excess = sh.getLastRow() - 1 - PIPELINE_LOG_MAX_ROWS_;
     if (excess > 0) sh.deleteRows(2, excess);
-  } catch (e) { Logger.log(`pipelineLog_ skip: ${e.message}`); }
+    return true;
+  } catch (e) {
+    Logger.log(`pipelineLog_ skip: ${e.message}`);
+    consoleError_(`pipelineLog_ failed (${tenantId}/${event}): ${e.message}`);
+    return false;
+  }
+}
+
+/**
+ * pipeline_log のうち tenant_id='_hourly'（実行全体の記録）の行を古い順に返す。
+ * 失敗時は例外を投げる（呼び出し側が検知をスキップして続行する）。タブが無ければ空配列。
+ * at はシート側で Date に変換されている場合もあるため、生の値のまま返す。
+ */
+function readHourlyLogRows_() {
+  const sh = getMasterWorkbook_().getSheetByName(PIPELINE_LOG_SHEET_);
+  if (!sh) return [];
+  return sh.getDataRange().getValues().slice(1)
+    .filter(r => String(r[0]) === '_hourly')
+    .map(r => ({ event: String(r[1]), detail: String(r[2]), at: r[3] }));
 }
 
 // ===== テナント作成時 / 手動切替 =====

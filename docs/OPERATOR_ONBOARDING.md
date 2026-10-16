@@ -31,6 +31,21 @@
 - `runLicenseCheck` は active 全テナントの RMS ライセンス残り30日以内と失効済みを `ADMIN_EMAIL` に通知する（テナントごとに同じ日に2回は送らない＝`billing_events` の `license_notice_sent`。`ADMIN_EMAIL` 未設定の場合は送らず実行ログに出すだけ）。
 - 通知の取りこぼしを避けるため、日次トリガーが動いているかを `auditOnboardingReadiness` で確認する。
 
+## 4-2. 毎時実行の記録 `pipeline_log` の `_hourly` 行
+`runHourlyFollowPipeline`（毎時）の実行全体は、マスターシートの `pipeline_log` タブに `tenant_id=_hourly` で残る（`detail` は `run=<実行ID>` 形式。テナント別の `hourly_done` / `hourly_error` / `billing_skip` は従来どおりテナントIDの行で、こちらにも `run=<実行ID>` が付く）。
+- `hourly_start` — 実行の開始。
+- `hourly_done` — 正常終了。`run=<ID> tenants=<対象数> ran=<実行数> billing_skipped=<課金ガードでskip> errors=<エラー数>`。`errors` はテナント単位の例外とレビューお礼メールの失敗の合計。
+- `hourly_error` — 実行全体の例外（`stage=` が発生箇所: `listActiveTenants` など、`msg=` が内容）。終了マーカーを兼ねる。テナント別の `hourly_error` は他テナントの処理を止めない。
+- `hourly_skip` — アクティブテナントが0件で何もしなかった（`reason=no_active_tenants`）。終了マーカーを兼ねる。課金ガードによる skip は理由つきの `billing_skip` が残り、`hourly_done` の `billing_skipped` に数えられる。
+- `hourly_incomplete` — 開始時に「前回の `hourly_start` に対する終了マーカー（done / error / skip）が無い」ことを検知した（`prev=<前回のrun> prev_start=<時刻>`）。実行が途中で止まった（時間切れ・GAS側の強制停止など）可能性。
+- `hourly_gap` — 前回の `hourly_start` から **90分超**空いて開始した（`gap_min=<分>`）。トリガーが発火しなかった・止まっていた可能性。毎時トリガーの揺らぎを見込んだ閾値（`HOURLY_GAP_THRESHOLD_MIN_`）。
+- `hourly_alert` — `ADMIN_EMAIL` へ異常通知を送った記録。
+
+見方: 正常なら **`hourly_start` と `hourly_done`（または `hourly_skip` / `hourly_error`）が同じ run ID で対**になる。`incomplete` は「始まったのに終わっていない」（実行はされた）、`gap` は「そもそも始まっていない時間がある」（発火漏れ）で、別の異常。両方が同時に出ることもある。
+- 通知条件: 今回の開始時に `incomplete` または `gap` を検知し、**かつ前回の実行の開始時にも検知されていた（2回連続）** ときだけ `ADMIN_EMAIL` に通知する。通知は **1日1回まで**（同日に `hourly_alert` があれば送らない）。`ADMIN_EMAIL` 未設定の場合は送らず実行ログに出すだけ（`hourly_alert` も残さない）。1回だけの異常は行が残るのみで通知しない。
+- `pipeline_log` は **直近200行**で古い行から削除される。毎時1回あたり `_hourly` は最低2行（start + done）増え、テナント別の行も加わるため、**数日分しか遡れない**。調べるときは早めに見ること（異常時は incomplete / gap / alert でさらに増える）。
+- 記録の書き込み自体が失敗しても実行は止まらず、実行ログ（GAS の実行数・Cloud ログ）に `pipelineLog_ failed` が出る。前回状態を読めない場合はその回の検知を省略して続行する。
+
 ## 5. fincode（審査完了後に有効化）
 - 仕様（確認元 https://docs.fincode.jp/develop_support/development_monitoring / https://docs.fincode.jp/api の Webhook_通知仕様）: 認証は `Fincode-Signature` ヘッダ（Webhook 登録時に設定した署名値と同一の固定文字列）、応答は HTTP200・text/plain・`0`。一意な event_id は無いため PHP が合成。
 - 手順: ① fincode ダッシュボードで Webhook の signature 値と通知先 URL（`fincode_webhook.php`）を登録 ② `lolipop/fincode_webhook.php` を smtp_bridge.php と同階層へ配置（WinSCP・人手）③ config.php に `fincode_signature / gas_webapp_url / gas_bridge_token` を追記 ④ GAS Script Properties に `BRIDGE_TOKEN`（②と同値）と `FINCODE_WEBHOOK_SECRET` を登録（未設定の間は受信拒否）⑤ 各テナントの `fincode_customer_id / fincode_subscription_id` をマスターシートへ記入 ⑥ `fincode_payment_url` を設定

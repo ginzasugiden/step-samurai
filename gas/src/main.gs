@@ -42,37 +42,143 @@ function runPipeline() {
   });
 }
 
+// ===== 毎時パイプラインの実行全体の記録（pipeline_log の tenant_id='_hourly' 行） =====
+const HOURLY_LOG_ID_ = '_hourly';
+/** 前回の hourly_start からこの分数を超えて空いたら「発火漏れ」(hourly_gap)。毎時トリガーの揺らぎを見込んだ閾値 */
+const HOURLY_GAP_THRESHOLD_MIN_ = 90;
+/** run の終了マーカー（どれか1つが同じ run にあれば正常に終わったとみなす） */
+const HOURLY_END_EVENTS_ = ['hourly_done', 'hourly_error', 'hourly_skip'];
+
+function hourlyNow_() { return new Date(); }
+
+function hourlyRunOf_(detail) { const m = /(?:^|\s)run=(\S+)/.exec(String(detail || '')); return m ? m[1] : ''; }
+
+/** pipeline_log の at（'yyyy-MM-dd HH:mm:ss' JST の文字列、またはシートが変換した Date）をミリ秒に。解釈できなければ NaN */
+function hourlyAtMs_(v) {
+  if (v instanceof Date) return v.getTime();
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(v || ''));
+  return m ? Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+09:00`) : NaN;
+}
+
+function hourlyAtStr_(v) {
+  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss') : String(v);
+}
+
+/**
+ * 過去の _hourly 行から異常を判定する（純粋関数）。
+ *  incomplete: 直近の hourly_start の run に終了マーカーが無い / gap: 直近 start から閾値超
+ *  prevAnomalous: 前回 run の開始時にも異常（hourly_incomplete / hourly_gap が prev run で記録済み）が検知されていたか
+ *  alertedToday: 今日すでに hourly_alert を送ったか
+ */
+function analyzeHourlyHistory_(rows, nowMs, todayStr) {
+  const out = { incomplete: null, gap: null, prevRun: '', prevAnomalous: false, alertedToday: false };
+  let last = -1;
+  rows.forEach((r, i) => { if (r.event === 'hourly_start') last = i; });
+  rows.forEach(r => {
+    const ms = hourlyAtMs_(r.at);
+    if (r.event === 'hourly_alert' && !isNaN(ms) && Utilities.formatDate(new Date(ms), 'Asia/Tokyo', 'yyyy-MM-dd') === todayStr) out.alertedToday = true;
+  });
+  if (last < 0) return out;
+  const prevRun = hourlyRunOf_(rows[last].detail), prevMs = hourlyAtMs_(rows[last].at);
+  out.prevRun = prevRun;
+  const ended = rows.some(r => HOURLY_END_EVENTS_.indexOf(r.event) >= 0 && hourlyRunOf_(r.detail) === prevRun);
+  if (!ended) out.incomplete = { prev: prevRun, prevStart: hourlyAtStr_(rows[last].at) };
+  if (!isNaN(prevMs)) { const min = Math.round((nowMs - prevMs) / 60000); if (min > HOURLY_GAP_THRESHOLD_MIN_) out.gap = { min: min }; }
+  out.prevAnomalous = rows.some(r => (r.event === 'hourly_incomplete' || r.event === 'hourly_gap') && hourlyRunOf_(r.detail) === prevRun);
+  return out;
+}
+
+/** 管理者通知の安全ラッパ。失敗しても処理は継続（console.error + Logger.log）。戻り値: 例外なく終われば true */
+function notifyAdminSafe_(message) {
+  try { notifyAdmin_(message); return true; }
+  catch (e) { Logger.log(`notifyAdmin_ failed: ${e.message}`); consoleError_(`notifyAdmin_ failed: ${e.message}`); return false; }
+}
+
+/**
+ * 開始時の検知（hourly_start を書く前に呼ぶ）。incomplete / gap を記録し、2回連続なら 1日1回まで ADMIN_EMAIL へ通知する。
+ * 読み出しに失敗したら検知をスキップして続行する（例外は出さない）。
+ */
+function detectHourlyAnomalies_(runId, now) {
+  try {
+    const today = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd');
+    const a = analyzeHourlyHistory_(readHourlyLogRows_(), now.getTime(), today);
+    if (a.incomplete) pipelineLog_(HOURLY_LOG_ID_, 'hourly_incomplete', `run=${runId} prev=${a.incomplete.prev} prev_start=${a.incomplete.prevStart}`);
+    if (a.gap) pipelineLog_(HOURLY_LOG_ID_, 'hourly_gap', `run=${runId} gap_min=${a.gap.min}`);
+    if (!(a.incomplete || a.gap) || !a.prevAnomalous) return a;
+    if (a.alertedToday) { Logger.log('hourly alert: 本日分は通知済みのためスキップ'); return a; }
+    const msg = `[step-samurai] 毎時パイプラインの異常が2回連続で検知されました（run=${runId} prev=${a.prevRun}）。` +
+      (a.incomplete ? ' 前回実行が未完了のまま終わっています(incomplete)。' : '') + (a.gap ? ` 発火間隔が ${a.gap.min} 分空いています(gap)。` : '') +
+      ' master の pipeline_log タブの _hourly 行を確認してください。';
+    if (!PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL')) { Logger.log(`hourly alert: ADMIN_EMAIL 未設定のため通知せず。内容: ${msg}`); return a; }
+    if (notifyAdminSafe_(msg)) pipelineLog_(HOURLY_LOG_ID_, 'hourly_alert', `run=${runId} prev=${a.prevRun}`);
+    return a;
+  } catch (e) {
+    Logger.log(`detectHourlyAnomalies_ skip: ${e.message}`);
+    consoleError_(`detectHourlyAnomalies_ skip: ${e.message}`);
+    return null;
+  }
+}
+
 /**
  * フォローメール専用の毎時エントリポイント。
  * evaluateCoupons/issueCoupon は呼ばない
  * （楽天Coupon APIの仕様未解決＝本番投入前の段階のため、クーポン経路は runPipeline 側に残したまま
  *  ここでは動かさない。フォローメールのみを本番前に独立して安定運用させるための分離）。
  * トリガー登録はこの関数の中では行わない（登録はGASエディタの「トリガー」画面から手動で行う運用）。
+ *
+ * 実行全体は pipeline_log に tenant_id='_hourly' で残す: hourly_start → hourly_done / hourly_error / hourly_skip（run=<実行ID>）。
+ * 開始前に前回未完了(hourly_incomplete)・発火漏れ(hourly_gap)を検知する。
  */
 function runHourlyFollowPipeline() {
-  const tenants = listActiveTenants();
-  tenants.forEach(tenant => {
-    if (!billingAllows_(tenant.tenant_id)) return;   // 課金ガード
-    try {
-      Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline start`);
-      fetchOrders(tenant.tenant_id);
-      linkOrdersReviews(tenant.tenant_id);
-      sendPendingMails(tenant.tenant_id);
-      // レビューお礼メール（クーポン無し）。フォローメールを巻き込まないよう独立して try/catch する
-      try {
-        sendPendingReviewThanks(tenant.tenant_id);
-      } catch(e) {
-        Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`);
-        notifyAdmin_(`[step-samurai] ${tenant.tenant_id} レビューお礼メールエラー: ${e.message}`);
-      }
-      Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline done`);
-      pipelineLog_(tenant.tenant_id, 'hourly_done', '');
-    } catch(e) {
-      Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline error: ${e.message}`);
-      pipelineLog_(tenant.tenant_id, 'hourly_error', e.message);
-      notifyAdmin_(`[step-samurai] ${tenant.tenant_id} runHourlyFollowPipelineエラー: ${e.message}`);
+  const runId = Utilities.getUuid().replace(/-/g, '').substring(0, 8);
+  const stats = { tenants: 0, ran: 0, billing_skipped: 0, errors: 0 };
+  let stage = 'detect';
+  try {
+    detectHourlyAnomalies_(runId, hourlyNow_());
+    pipelineLog_(HOURLY_LOG_ID_, 'hourly_start', `run=${runId}`);   // 失敗しても処理は止めない
+    stage = 'listActiveTenants';
+    const tenants = listActiveTenants();
+    stats.tenants = tenants.length;
+    if (!tenants.length) {
+      pipelineLog_(HOURLY_LOG_ID_, 'hourly_skip', `run=${runId} reason=no_active_tenants`);
+      return;
     }
-  });
+    tenants.forEach(tenant => {
+      try {
+        stage = 'billing';
+        if (!billingAllows_(tenant.tenant_id)) { stats.billing_skipped++; return; }   // 課金ガード（理由は billing_skip に記録済み）
+        Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline start`);
+        stage = 'fetchOrders';
+        fetchOrders(tenant.tenant_id);
+        stage = 'linkOrdersReviews';
+        linkOrdersReviews(tenant.tenant_id);
+        stage = 'sendPendingMails';
+        sendPendingMails(tenant.tenant_id);
+        // レビューお礼メール（クーポン無し）。フォローメールを巻き込まないよう独立して try/catch する
+        stage = 'sendPendingReviewThanks';
+        try {
+          sendPendingReviewThanks(tenant.tenant_id);
+        } catch(e) {
+          stats.errors++;
+          Logger.log(`[${tenant.tenant_id}] sendPendingReviewThanks error: ${e.message}`);
+          notifyAdminSafe_(`[step-samurai] ${tenant.tenant_id} レビューお礼メールエラー: ${e.message}`);
+        }
+        Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline done`);
+        pipelineLog_(tenant.tenant_id, 'hourly_done', `run=${runId}`);
+        stats.ran++;
+      } catch(e) {
+        stats.errors++;
+        Logger.log(`[${tenant.tenant_id}] runHourlyFollowPipeline error: ${e.message}`);
+        pipelineLog_(tenant.tenant_id, 'hourly_error', `run=${runId} stage=${stage} msg=${e.message}`);
+        notifyAdminSafe_(`[step-samurai] ${tenant.tenant_id} runHourlyFollowPipelineエラー: ${e.message}`);
+      }
+    });
+    pipelineLog_(HOURLY_LOG_ID_, 'hourly_done', `run=${runId} tenants=${stats.tenants} ran=${stats.ran} billing_skipped=${stats.billing_skipped} errors=${stats.errors}`);
+  } catch(e) {
+    Logger.log(`runHourlyFollowPipeline fatal (stage=${stage}): ${e.message}`);
+    pipelineLog_(HOURLY_LOG_ID_, 'hourly_error', `run=${runId} stage=${stage} msg=${e.message}`);
+    notifyAdminSafe_(`[step-samurai] runHourlyFollowPipeline 全体エラー (stage=${stage}): ${e.message}`);
+  }
 }
 
 // 注文番号から注文オブジェクトを取得（クーポンメール用）

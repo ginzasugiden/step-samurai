@@ -105,7 +105,7 @@
             <button id="status-btn">変更</button><pre id="status-result" class="result-box" hidden></pre></div>
           <div><h3>解約済みテナントの完全削除（purge）</h3>
             <button id="purge-btn" class="secondary" disabled>完全削除を実行…</button><pre id="purge-result" class="result-box" hidden></pre>
-            <p class="hint">状態が <b>disabled</b> の店舗だけ実行できます。暗号化データ（RMS/SMTP）・ログイン情報・招待・マスターの行を削除します。実行前に専用シートとマスター行を Drive に複製し、失敗したら何も消しません。専用シート本体は名前を PURGED_ に変えるだけです（譲渡または削除は手動）。店舗ID の再入力が必要です。</p></div>
+            <p class="hint">状態が <b>disabled</b> の店舗だけ実行できます。暗号化データ（RMS/SMTP）・ログイン情報・招待・マスターの行を削除します。実行前に専用シートとマスター行を Drive に複製し、失敗したら何も消しません。専用シート本体は名前を PURGED_ に変えるだけです（専用シートと複製の削除（解約日から30日以内）は人が行います）。店舗ID の再入力が必要です。</p></div>
           <div><h3>課金（manual 運用）</h3>
             <select id="bill-status"><option value="">（状態は変更しない）</option><option value="trial">trial</option><option value="active">active</option><option value="past_due">past_due</option><option value="canceled">canceled</option></select>
             <select id="bill-provider"><option value="">（方式は変更しない）</option><option value="manual">manual</option><option value="fincode">fincode</option></select>

@@ -36,7 +36,7 @@
 5. 「設定」→ `go_live_date` を確定（店舗の希望日を確認して調整）。`follow_days_after_ship` も確認
 6. 「操作」→ 遡及取得を開始（13ヶ月・約30分・自動継続）。完了後「データ確認」で `p2_orders_rows` と `p3` を確認
 7. （トークンは店舗が登録時に取得済み。紛失時のみ「操作」→ 新規発行して渡す）店舗は `webui/index.html`（設定・文面・テスト送信・レビュー取込）と `webui/analytics.html`（店舗分析）にこのトークンでログインする
-8. 店舗が index.html「テスト送信」で文面を確認（宛先は店舗メール固定、dry_run=true の間は送られずログのみ → 確認時は一時的に dry_run=false にして1通送り、戻す）
+8. 店舗が index.html「テスト送信」で文面を確認（宛先は店舗メール固定、dry_run=true の間は送られずログのみ → 確認時は一時的に dry_run=false にして1通送り、戻す。テスト送信は status が setup / active のときだけ可能で、paused・disabled では拒否される）
 9. 稼働: 「設定」→ `dry_run=false`、「操作」→ 状態を `active`。前提（認証情報・go_live_date・follow_days・follow_v1）が揃っていないと active にできない
 
 ## 3. レビューについて（外部店舗の方針）

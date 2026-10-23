@@ -162,8 +162,15 @@ function handleUpdateTemplate_(tenantId, payload) {
 /**
  * テスト送信。宛先は常にそのテナントの shop_email 固定（payloadでの宛先指定は受け付けない）。
  * DRY_RUN=true の間は実送信されず、内容をログ出力するのみ。
+ * テナント status が setup / active 以外（paused / disabled 等）は送らない。
  */
 function handleSendTestMail_(tenantId) {
+  // status が setup / active のときだけ送る（paused / disabled / その他 / 取得不能は拒否 = fail-closed）。dry_run 判定より前。
+  let st = '';
+  try { const t = listAllTenants_().find(x => x.tenant_id === tenantId); st = t ? t.status : ''; } catch (e) { st = ''; }
+  if (st !== 'setup' && st !== 'active') {
+    return jsonResponse_({ ok: false, error: 'tenant_not_sendable', message: '停止中のためテスト送信できません' });
+  }
   const creds = getRmsCredentials(tenantId);
   const tpl   = getTenantTemplateRaw_(tenantId, 'follow_v1');
   if (!tpl) return jsonResponse_({ ok: false, error: 'template_missing' });

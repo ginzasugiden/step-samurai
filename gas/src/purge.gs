@@ -89,3 +89,53 @@ function backupMasterRows_(tenantId, ts) {
   put('billing_events', ev[0].map(String), ev.slice(1).filter(r => String(r[2]) === tenantId));
   return out;
 }
+
+// ===== 解約後の削除リマインド（checkBillingDaily から try/catch 付きで呼ぶ） =====
+//
+// 規約第8条: 解約日から30日以内に専用シート等を削除する。disabled にしてから23日以上経った未 purge のテナントを ADMIN_EMAIL に知らせる。
+// 起点（disabled になった日）:
+//   1) billing_events の status_disabled（setTenantStatus_ が disabled 化時に記録）の最新日
+//   2) 記録が無い既存 disabled（demo 等）は、初回検知日に disabled_observed を追記して「この日」を起点にする。
+//      その初回だけ「disabled日の記録なし（本日を起点に記録）」付きで通知し、以後は起点+23日以上で通知（demo は初回1通→23日後から再開）。
+// purge 済みの判定: purge は tenants のマスター行を削除するので listAllTenants_ に出てこない。さらに起点以降の purge_tenant イベントがあれば対象外。
+// 同一テナントへの通知は1日1回（billing_events の purge_reminder_sent。note 先頭に JST 日付）。ADMIN_EMAIL 未設定ならログのみ（記録しない）。
+// status が disabled 以外（tokyoflower=active 等）は一切触れない。
+const PURGE_REMINDER_DAYS_ = 23, PURGE_DEADLINE_DAYS_ = 30;
+
+function daysBetweenStr_(from, to) {
+  const f = from.split('-').map(Number), t = to.split('-').map(Number);
+  return Math.round((Date.UTC(t[0], t[1] - 1, t[2]) - Date.UTC(f[0], f[1] - 1, f[2])) / 86400000);
+}
+
+/** 戻り値: 通知（または送信試行）したテナント ID の配列 */
+function checkPurgeReminders_() {
+  const today = billingToday_();
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL');
+  const done = [];
+  listAllTenants_().forEach(t => {
+    if (t.status !== 'disabled') return;
+    try {
+      const ev = getBillingEventsSheet_().getDataRange().getValues().slice(1).filter(r => String(r[2]) === t.tenant_id);
+      const starts = ev.filter(r => r[4] === 'status_disabled' || r[4] === 'disabled_observed').map(r => toJstDateString_(r[8]) || '').filter(Boolean).sort();
+      let start = starts.length ? starts[starts.length - 1] : '', unrecorded = false;
+      if (!start) { start = today; unrecorded = true; }
+      if (ev.some(r => r[4] === 'purge_tenant' && (toJstDateString_(r[8]) || '') >= start)) return;   // purge 完了
+      if (!unrecorded && daysBetweenStr_(start, today) < PURGE_REMINDER_DAYS_) return;
+      if (ev.some(r => r[4] === 'purge_reminder_sent' && String(r[7]).indexOf(today) === 0)) return;  // 同日2回目
+      const deadline = addDaysStr_(start, PURGE_DEADLINE_DAYS_);
+      const body = [
+        `テナントID: ${t.tenant_id}（${t.shop_name}）`,
+        `disabled になった日: ${start}${unrecorded ? '（disabled日の記録なし（本日を起点に記録））' : ''}`,
+        `削除期限: ${deadline}（disabled 日 + ${PURGE_DEADLINE_DAYS_} 日。規約第8条）`,
+        '',
+        '管理画面から purge_tenant を実行してください（専用シート・複製・認証情報・トークンを削除します）。'
+      ].join('\n');
+      if (!adminEmail) { Logger.log(`checkPurgeReminders_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return; }
+      if (unrecorded) appendBillingEvent_(t.tenant_id, 'system', 'disabled_observed', 'disabled', 'disabled', `初回検知日=${today}`);
+      MailApp.sendEmail(adminEmail, `[step-samurai] 解約済みテナントの削除期限が近づいています（${t.tenant_id}）`, body);
+      appendBillingEvent_(t.tenant_id, 'system', 'purge_reminder_sent', '', '', `${today} start=${start} deadline=${deadline}`);
+      done.push(t.tenant_id);
+    } catch (e) { Logger.log(`checkPurgeReminders_ error [${t.tenant_id}]: ${e.message}`); }
+  });
+  return done;
+}

@@ -86,8 +86,14 @@ function setTenantStatus_(tenantId, status) {
   const idIdx  = header.indexOf('tenant_id'), stIdx = header.indexOf('status');
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idIdx]) === tenantId) {
+      const prevStatus = String(data[i][stIdx] || '');
       sheet.getRange(i + 1, stIdx + 1).setValue(status);
       _masterRowsCache = null;
+      // 解約後の削除リマインド（purge.gs checkPurgeReminders_）の起点。記録に失敗しても status 変更は成功させる
+      if (status === 'disabled' && prevStatus !== 'disabled') {
+        try { appendBillingEvent_(tenantId, 'manual', 'status_disabled', prevStatus, 'disabled', 'status を disabled に変更'); }
+        catch (e) { Logger.log(`setTenantStatus_ status_disabled 記録失敗 [${tenantId}]: ${e.message}`); }
+      }
       return { ok: true };
     }
   }

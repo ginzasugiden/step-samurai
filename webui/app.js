@@ -350,7 +350,9 @@ document.getElementById('send-test-btn').addEventListener('click', async () => {
 
   try {
     const res = await callApi('send_test_mail', {});
-    resultBox.textContent = JSON.stringify(res, null, 2);
+    resultBox.textContent = (res && res.ok === false && res.error === 'tenant_not_sendable')
+      ? (res.message || '停止中のためテスト送信できません')
+      : JSON.stringify(res, null, 2);
   } catch (e) {
     resultBox.textContent = '通信エラー: ' + e.message;
   } finally {

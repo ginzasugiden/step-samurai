@@ -51,7 +51,7 @@ $('check-btn').addEventListener('click', async () => {
 // 決済案内: fincode_payment_url があればリンク、無ければ請求書払い案内。https の URL のみリンク化する
 function renderBillingGuide(b) {
   const box = $('billing-guide'); box.textContent = '';
-  const trial = document.createElement('p'); trial.textContent = b.trial_end ? `無料トライアルは ${b.trial_end} までです。` : '無料トライアル期間は最大30日です。'; box.appendChild(trial);
+  const trial = document.createElement('p'); trial.textContent = b.trial_end ? `無料トライアルは ${b.trial_end} までです。` : '無料トライアル期間は30日間です。'; box.appendChild(trial);
   const pay = document.createElement('p');
   if (/^https:\/\//.test(String(b.payment_url || ''))) {
     pay.append('お支払い（クレジットカード）: '); const a = document.createElement('a'); a.href = b.payment_url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'お支払い手続きへ'; pay.appendChild(a);

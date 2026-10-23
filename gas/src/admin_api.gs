@@ -78,10 +78,28 @@ function withTenant_(tenantId, fn) {
 
 // ===== 一覧 =====
 
+/** billing_events から tenant ごとの最新 terms_agreed を集計 → { tenant_id: { version, agreed_at } } */
+function latestTermsByTenant_() {
+  const out = {};
+  try {
+    const rows = getBillingEventsSheet_().getDataRange().getValues().slice(1);
+    rows.forEach(r => {
+      if (String(r[4]) !== 'terms_agreed') return;
+      const note = String(r[7] || '');
+      const v = (note.match(/terms_version=([^;]*)/) || [])[1] || '';
+      const a = (note.match(/terms_agreed_at=([^;]*)/) || [])[1] || String(r[8] || '');
+      const tid = String(r[2]);
+      if (!out[tid] || a >= out[tid].agreed_at) out[tid] = { version: v, agreed_at: a };   // +09:00 固定の ISO8601 は文字列比較で時系列順
+    });
+  } catch (e) { Logger.log('latestTermsByTenant_ skip: ' + e.message); }
+  return out;
+}
+
 function adminListTenants_() {
   const tenants   = listAllTenants_();
   const authRows  = ensureAuthColumns_().getDataRange().getValues().slice(1);
   const pending   = listBackfillPendingTenants_();
+  const terms     = latestTermsByTenant_();   // billing_events を1回だけ読む
   return tenants.map(t => {
     const out = {
       tenant_id: t.tenant_id, shop_name: t.shop_name, status: t.status,
@@ -91,6 +109,7 @@ function adminListTenants_() {
       has_credentials: false, credentials_expiry: '',
       backfill_cursor: (pending.find(p => p.tenantId === t.tenant_id) || {}).cursor || null,
       settings: {},
+      terms_version: (terms[t.tenant_id] || {}).version || '', terms_agreed_at: (terms[t.tenant_id] || {}).agreed_at || '',
     };
     const rms = getTenantSecretMeta_(t.tenant_id, 'rms');
     if (rms) { out.has_credentials = true; out.credentials_expiry = String(rms.meta.expiry || ''); out.credentials_source = 'self'; }

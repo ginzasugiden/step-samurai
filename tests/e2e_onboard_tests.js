@@ -57,19 +57,19 @@ t('admin: 招待コード発行 → テナント自動作成（setup・billing=t
 t('テナントタブ（orders/reviews/sends/coupons/settings/templates）が自動生成', () => {
   const ss = books[master.rows.find(x => x[0] === TID)[2]]; ['orders', 'reviews', 'sends', 'coupons', 'settings', 'templates'].forEach(n => assert.ok(ss.getSheetByName(n), n + ' が無い')); });
 t('onboard: RMS 接続テスト失敗（ダミーキー）→ 保存されず・招待は消費されない', () => {
-  const r = ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'E2E店', shop_email: 'e2e@example.jp', service_secret: 'DUMMY', license_key: 'DUMMY', smtp_user: 'dummy', smtp_pass: 'dummy', login_password: 'e2e-password1' });
+  const r = ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'E2E店', shop_email: 'e2e@example.jp', service_secret: 'DUMMY', license_key: 'DUMMY', smtp_user: 'dummy', smtp_pass: 'dummy', login_password: 'e2e-password1', terms_version: '1.0' });
   assert.equal(r.error, 'rms_auth_failed'); assert.equal(ctx.getTenantSecret_(TID, 'rms'), null); assert.equal(ctx.verifyInvite_(invite, false), TID);
   assert.equal(ctx.readBillingRow_(TID).trial_start, '', '接続失敗では trial を起算しない'); });
 t('接続失敗のテナントは active にできない（RMSキー未登録・SMTP未登録がブロッカー）', () => {
   const r = ctx.adminSetStatus_(TID, 'active'); assert.equal(r.error, 'activation_requirements_not_met'); assert.ok(r.blockers.some(x => x.includes('RMS'))); assert.equal(master.rows.find(x => x[0] === TID)[3], 'setup'); });
 t('接続成功なら暗号化保存・招待は1回きり（再利用不可）・tokyoflower データは見えない', () => {
   rmsCode = 200;
-  const r = ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'E2E店', shop_email: 'e2e@example.jp', service_secret: 'SS-E2E', license_key: 'LK-E2E', smtp_user: 'smtpuser', smtp_pass: 'pw', login_password: 'e2e-password1' });
+  const r = ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'E2E店', shop_email: 'e2e@example.jp', service_secret: 'SS-E2E', license_key: 'LK-E2E', smtp_user: 'smtpuser', smtp_pass: 'pw', login_password: 'e2e-password1', terms_version: '1.0' });
   assert.equal(r.ok, true); assert.equal(r.billing.billing_status, 'trial'); assert.equal(r.billing.payment_url, '');
   const today = fmt(new Date(), 'yyyy-MM-dd'); const end = new Date(Date.parse(today + 'T00:00:00Z') + 30 * 86400000).toISOString().slice(0, 10);
   assert.equal(ctx.readBillingRow_(TID).trial_start, today, '申込完了時に起算'); assert.equal(ctx.readBillingRow_(TID).trial_end, end); assert.equal(r.billing.trial_end, end);
   assert.ok(!JSON.stringify(books.MASTER.sheets.tenant_secrets.rows).includes('SS-E2E'));
-  assert.equal(ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'x', shop_email: 'e2e@example.jp', service_secret: 'a', license_key: 'b', smtp_user: 'u', smtp_pass: 'p', login_password: 'e2e-password1' }).error, 'invalid_invite');
+  assert.equal(ctx.onboardSubmit_({ invite, sid: '999999', shop_name: 'x', shop_email: 'e2e@example.jp', service_secret: 'a', license_key: 'b', smtp_user: 'u', smtp_pass: 'p', login_password: 'e2e-password1', terms_version: '1.0' }).error, 'invalid_invite');
   const token = r.token; assert.equal(ctx.verifyTenantToken_(token), TID);
   const own = ctx.getTenantSpreadsheet(ctx.verifyTenantToken_(token)); assert.notEqual(own.getId(), 'SS_TF');
   assert.ok(!JSON.stringify(own.getSheetByName('orders').rows).includes('240364')); });

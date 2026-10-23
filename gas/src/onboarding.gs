@@ -13,6 +13,7 @@
 
 const INVITES_SHEET_ = 'invites';
 const INVITE_TTL_DAYS_ = 7;
+const TERMS_VERSION = '1.0';   // 利用規約・プライバシーポリシーの版（改定時にここと webui/onboard.js の TERMS_VERSION を同時に更新）
 
 function getInvitesSheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('TENANT_MASTER_SHEET_ID');
@@ -66,6 +67,7 @@ function onboardCheck_(payload) {
 function onboardSubmit_(payload) {
   const tenantId = verifyInvite_(payload.invite, false);
   if (!tenantId) return { ok: false, error: 'invalid_invite' };
+  if (String(payload.terms_version || '') !== TERMS_VERSION) return { ok: false, error: 'terms_not_agreed' };   // fail-closed: 何も保存せず招待も消費しない
 
   const p = k => String(payload[k] || '').trim();
   const errors = [];
@@ -101,12 +103,23 @@ function onboardSubmit_(payload) {
 
   verifyInvite_(payload.invite, true); // 使用済みに
   try { startTrialIfPending_(tenantId); } catch (e) { Logger.log(`onboardSubmit_ trial start skip [${tenantId}]: ${e.message}`); }   // 無料期間は申込完了（接続テスト成功）時に起算
+  try { recordTermsAgreed_(tenantId); } catch (e) { Logger.log(`onboardSubmit_ terms record skip [${tenantId}]: ${e.message}`); }   // 登録自体は失敗させない
   setTenantPassword_(tenantId, String(payload.login_password));
   const token = issueTenantToken_(tenantId);
   notifyAdmin_(`[step-samurai] 店舗 ${tenantId}（${p('shop_name')}）がセルフ登録を完了しました。admin.html で内容を確認し、遡及取得→稼働化へ進めてください。`);
   let billing = {};
   try { const b = readBillingRow_(tenantId); billing = { billing_status: b ? b.billing_status : '', trial_end: b ? b.trial_end : '', payment_url: getGlobalSetting_('fincode_payment_url', '') }; } catch (e) { /* 表示用のみ */ }
   return { ok: true, tenant_id: tenantId, token: token, rms_shop: test.rms_message || 'OK', billing: billing };
+}
+
+/** JST ISO8601（例 2026-10-23T10:15:00+09:00） */
+function termsNowIso_() {
+  return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 19) + '+09:00';
+}
+
+/** 規約同意の記録（billing_events: event_type=terms_agreed, source=onboard）。マスターの列は触らない */
+function recordTermsAgreed_(tenantId) {
+  appendBillingEvent_(tenantId, 'onboard', 'terms_agreed', '', '', `terms_version=${TERMS_VERSION};terms_agreed_at=${termsNowIso_()}`);
 }
 
 /** 平文キーで RMS 認証を試す（保存前検証）。読み取りのみ */

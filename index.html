@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ステップ侍 — 楽天店舗のフォローメール自動化</title>
-<meta name="description" content="楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを自動で送る。月額9,800円・初期費用0円・最大30日無料。">
+<meta name="description" content="楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを自動で送る。月額9,800円（税別）・初期費用0円・最大30日無料。運営: 株式会社GSD（銀座杉伝）。">
 <style>
 :root { --bg:#fbfaf7; --surface:#ffffff; --text:#1d1f23; --muted:#5f6670; --line:#e4e1d8; --accent:#b3261e; --accent-ink:#ffffff; --ok:#1f7a4d; --soon:#8a6d00; }
 @media (prefers-color-scheme: dark) { :root { --bg:#17181b; --surface:#212327; --text:#f0eee9; --muted:#a4a9b2; --line:#33363c; --accent:#e5584f; --accent-ink:#17181b; --ok:#5fc58f; --soon:#e0c25a; } }
@@ -57,20 +57,20 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
     <h2>機能</h2>
     <div class="grid">
       <div class="card"><h3>フォローメール<span class="tag ok">提供中</span></h3><p>発送から指定日数後に、店舗の差出人でご利用のお礼とレビューのお願いを送信。文面は管理画面から編集できます。</p></div>
-      <div class="card"><h3>レビューお礼メール<span class="tag ok">提供中</span></h3><p>レビューが投稿された注文へ、お礼のメールを自動送信。低評価は自動送信せず、個別対応の判断材料として残します。</p></div>
+      <div class="card"><h3>レビューお礼メール<span class="tag ok">提供中</span></h3><p>レビューが投稿された注文へ、お礼のメールを自動送信。低評価は自動送信せず、個別対応の判断材料として残します。レビューは管理画面から RMS の CSV を月1回アップロードして取り込みます。</p></div>
       <div class="card"><h3>店舗分析<span class="tag ok">提供中</span></h3><p>受注・リピート・レビュー率などを店舗専用の画面で確認できます。</p></div>
-      <div class="card"><h3>クーポン発行機能<span class="tag soon">準備中</span></h3><p>レビュー投稿特典などのクーポン自動発行は現在準備中です。提供開始はあらためてご案内します。</p></div>
+      <div class="card"><h3>クーポン発行機能<span class="tag soon">準備中</span></h3><p>レビュー投稿特典などのクーポン自動発行は現在準備中です。提供開始時に、追加料金なしで有効化します。</p></div>
     </div>
   </section>
 
   <section id="pricing">
     <h2>料金</h2>
     <div class="price">
-      <div class="card"><div class="n">9,800円</div><div class="l">月額</div></div>
+      <div class="card"><div class="n">9,800円</div><div class="l">月額（税別）</div></div>
       <div class="card"><div class="n">0円</div><div class="l">初期費用</div></div>
       <div class="card"><div class="n">最大30日</div><div class="l">無料トライアル</div></div>
     </div>
-    <p class="note">※ 表示金額・無料期間は運営設定（plan_price_monthly / setup_fee / trial_days）と同期して運用します。無料期間の上限は30日です。お支払いは請求書払い（担当者よりご案内）です。クレジットカード決済は準備中です。</p>
+    <p class="note">※ 表示金額は税別です。無料トライアルは、申込完了日（楽天への接続テスト成功日）から最大30日です。お支払いは請求書払い（月末締め・翌月末払い、日割りなし）です。解約は前月末までにお申し出ください。クレジットカード決済は準備中です。詳しくは<a href="terms.html">利用規約</a>・<a href="company.html">運営者情報</a>をご覧ください。</p>
   </section>
 
   <section id="flow">
@@ -81,7 +81,8 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
       <li>楽天への接続テストに成功すると登録完了。無料トライアルが始まります。</li>
       <li>運営が内容を確認し、稼働開始日に合わせて送信を開始します。</li>
     </ol>
-    <p class="note">準備物・制約は担当者よりご案内します（RMS の受注API利用申請、あんしんメルアドSMTP の発行が必要です）。</p>
+    <p class="note">RMS の受注API利用申請、あんしんメルアドSMTP の発行が必要です。準備物と手順は、ご利用開始ガイドをご覧ください。</p>
+    <div class="cta"><a class="btn ghost" href="guide.html">ご利用開始ガイドを見る</a></div>
   </section>
 
   <section id="apply">
@@ -96,7 +97,16 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
 </div>
 </main>
 
-<footer><div class="wrap">ステップ侍 ／ 運営: 銀座杉伝　<a href="webui/admin.html">運営ログイン</a></div></footer>
+<footer><div class="wrap">
+  <nav style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:10px">
+    <a href="terms.html">利用規約</a>
+    <a href="privacy.html">プライバシーポリシー</a>
+    <a href="company.html">運営者情報</a>
+    <a href="guide.html">ご利用開始ガイド</a>
+    <a href="mailto:ginzasugiden@gmail.com">お問い合わせ</a>
+  </nav>
+  ステップ侍 ／ 運営: 株式会社GSD（銀座杉伝）　<a href="webui/admin.html">運営ログイン</a>
+</div></footer>
 
 <script>
 document.getElementById('invite-form').addEventListener('submit', function (e) {

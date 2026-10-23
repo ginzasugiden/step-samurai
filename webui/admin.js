@@ -132,6 +132,7 @@ async function selectTenant(id) {
     ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result','purge-result'].forEach(i => { $(i).hidden = true; });
     document.querySelector('#probe-table tbody').innerHTML = '';
   }
+  $('detail-terms').textContent = t.terms_version ? `規約同意：v${t.terms_version} / ${String(t.terms_agreed_at || '').replace('T', ' ').slice(0, 16)}` : '規約同意：記録なし';
   renderChecklist(t);
   try { const r = await callApi('get_tenant_settings', { tenant_id: id }); if (r.ok) renderSettings(r.settings); } catch (e) {}
   $('detail-card').scrollIntoView({ behavior: 'smooth' });

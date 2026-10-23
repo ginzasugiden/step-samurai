@@ -30,7 +30,7 @@
     </div>
 
     <h2>3. 楽天ペイ受注API のキー</h2>
-    <p class="hint">RMS →「店舗設定」→「WEB API」で <b>楽天ペイ受注API</b> を利用申請し、<b>serviceSecret</b> と <b>licenseKey</b> を発行してください。licenseKey には有効期限（通常1年）があります。</p>
+    <p class="hint">RMS →「店舗設定」→「WEB API」で <b>楽天ペイ受注API</b> を利用申請し、<b>serviceSecret</b> と <b>licenseKey</b> を発行してください。licenseKey には有効期限があります（RMS の画面に表示される期限日を下の欄に入力してください）。</p>
     <div class="form-grid">
       <label>serviceSecret <input id="service_secret" type="password" autocomplete="new-password"></label>
       <label>licenseKey <input id="license_key" type="password" autocomplete="new-password"></label>
@@ -57,6 +57,7 @@
       <label>稼働開始希望日（この日以降の発送分から送信） <input id="go_live_date" type="date"></label>
     </div>
 
+    <label class="hint"><input id="agree_terms" type="checkbox"> <a href="../terms.html" target="_blank" rel="noopener">利用規約（v1.0）</a>と<a href="../privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a>に同意する（必須）</label><br>
     <label class="hint"><input id="agree" type="checkbox"> 「取扱いについて」を確認し、登録に同意します</label><br>
     <button id="submit-btn" disabled>接続テストして登録</button>
     <pre id="submit-result" class="result-box" hidden></pre>
@@ -77,7 +78,7 @@
       <li>受注データはこの店舗専用のスプレッドシート1ファイルに保存され、他の店舗からアクセスできる経路はありません。</li>
       <li>お客様のログイン情報（R-Login・楽天会員ID・パスワード）は一切お預かりしません。</li>
       <li>licenseKey は期限切れ前に、管理画面「認証情報」から更新できます（30日前に運営者へ通知が届きます）。</li>
-      <li>解約時は、暗号化データ・トークンを削除し、スプレッドシートは店舗へ譲渡または削除します。</li>
+      <li>解約時は、暗号化データ・トークンを削除し、スプレッドシートは運営が複製を作成のうえ、解約日から30日以内に削除します（利用規約第8条）。</li>
     </ul>
   </section>
 </main>

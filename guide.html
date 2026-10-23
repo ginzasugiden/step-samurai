@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ご利用開始ガイド | ステップ侍</title>
+<meta name="description" content="ステップ侍を始めるための準備物チェックリスト、RMSでの取得手順、申込から稼働までの流れ、よくある質問。">
+<style>
+:root { --bg:#fbfaf7; --surface:#ffffff; --text:#1d1f23; --muted:#5f6670; --line:#e4e1d8; --accent:#b3261e; --accent-ink:#ffffff; --ok:#1f7a4d; --soon:#8a6d00; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17181b; --surface:#212327; --text:#f0eee9; --muted:#a4a9b2; --line:#33363c; --accent:#e5584f; --accent-ink:#17181b; --ok:#5fc58f; --soon:#e0c25a; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; line-height:1.75; }
+.wrap { max-width:920px; margin:0 auto; padding:0 16px; }
+header.top { border-bottom:1px solid var(--line); }
+header.top .wrap { display:flex; align-items:center; justify-content:space-between; height:56px; }
+.brand { font-weight:700; letter-spacing:.04em; color:var(--text); text-decoration:none; }
+a { color:var(--accent); }
+.btn { display:inline-block; padding:.7rem 1.4rem; border-radius:8px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:700; border:0; font-size:1rem; cursor:pointer; font-family:inherit; }
+.btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+.cta { display:flex; gap:12px; flex-wrap:wrap; }
+h1 { font-size:clamp(1.5rem,4.5vw,2.1rem); line-height:1.35; margin:40px 0 12px; }
+section { padding:28px 0; border-top:1px solid var(--line); }
+section.first { border-top:0; padding-top:8px; }
+h2 { font-size:1.25rem; margin:0 0 14px; }
+h3 { font-size:1.05rem; margin:20px 0 8px; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; margin:0 0 16px; }
+.card h3 { margin:16px 0 8px; }
+.card h3:first-child { margin-top:0; }
+.card p { margin:0 0 8px; }
+.tag { display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:99px; border:1px solid currentColor; margin-left:6px; vertical-align:middle; }
+.tag.soon { color:var(--soon); } .tag.ok { color:var(--ok); }
+.note { color:var(--muted); font-size:.85rem; }
+.lead { color:var(--muted); }
+ol.steps, ul.list { padding-left:1.3rem; } ol.steps li, ul.list li { margin-bottom:8px; }
+table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); font-size:.95rem; }
+th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+th { background:var(--bg); width:30%; }
+.tablewrap { overflow-x:auto; }
+.check { list-style:none; padding:0; margin:0; }
+.check li { margin-bottom:12px; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.check label { display:block; cursor:pointer; }
+.check input { margin-right:8px; transform:scale(1.2); }
+.check .sub { display:block; color:var(--muted); font-size:.88rem; margin-left:26px; }
+details { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:10px; }
+summary { font-weight:700; cursor:pointer; }
+footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--muted); font-size:.85rem; }
+footer nav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
+@media print { header.top, footer, .noprint { display:none !important; } body { background:#fff; color:#000; } .card, .check li, details { border-color:#999; } a { color:#000; } .check input { transform:scale(1.4); } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">ステップ侍</a>
+  <nav><a href="index.html">トップへ戻る</a></nav>
+</div></header>
+<main>
+<div class="wrap">
+<h1>ご利用開始ガイド</h1>
+<p class="lead">ステップ侍は、楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを店舗名義で自動送信するサービスです。このページの準備物を揃えると、登録は約15分で終わります。</p>
+<p class="note">お客様のログイン情報（R-Login・楽天会員ID・パスワード）はお預かりしません。</p>
+
+<section id="checklist" class="first"><h2>1. 準備物チェックリスト</h2>
+<p class="noprint"><button class="btn ghost" type="button" id="print-btn">印刷する</button></p>
+<ul class="check">
+<li><label><input type="checkbox"> <b>店舗ID（sid・数字）</b></label><span class="sub">店舗URL https://www.rakuten.co.jp/○○/ に対応する RMS の店舗ID</span></li>
+<li><label><input type="checkbox"> <b>serviceSecret / licenseKey</b></label><span class="sub">楽天ペイ受注API の利用申請後に発行（手順は次の節）。有効期限があります</span></li>
+<li><label><input type="checkbox"> <b>licenseKey の有効期限日</b></label><span class="sub">RMS の画面に表示される期限日を控えます</span></li>
+<li><label><input type="checkbox"> <b>店舗連絡先メールアドレス</b></label><span class="sub">RMS に登録済みのもの。フォローメールの差出人になります</span></li>
+<li><label><input type="checkbox"> <b>あんしんメルアド SMTP の ID / パスワード</b></label><span class="sub">店舗名義でお客様のマスクアドレスへ送るために必要です</span></li>
+<li><label><input type="checkbox"> <b>稼働開始希望日・フォローまでの日数</b></label><span class="sub">開始日以降に発送した注文だけが対象です（お申し込み日以降の日付を指定）。日数の目安は発送後5日</span></li>
+<li><label><input type="checkbox"> <b>管理画面のログインパスワード</b></label><span class="sub">8文字以上。登録時に設定します</span></li>
+</ul>
+</section>
+
+<section id="rms"><h2>2. RMS での取得手順</h2>
+<div class="card">
+<h3>serviceSecret / licenseKey</h3>
+<ol class="steps">
+<li>RMS の「店舗設定」→「WEB API」を開きます。</li>
+<li>楽天ペイ受注API の利用申請をします。</li>
+<li>ライセンスキーを発行し、表示された serviceSecret と licenseKey、有効期限を控えます。</li>
+</ol>
+<p><b>licenseKey には有効期限があります。</b>RMS の画面に表示される期限日を登録し、期限前に管理画面「認証情報」で更新してください（期限30日前に運営者へ通知し、運営者から更新のお願いを連絡します）。期限が切れると、受注の取得とメール送信ができなくなります。</p>
+</div>
+<div class="card">
+<h3>あんしんメルアド SMTP</h3>
+<ol class="steps">
+<li>RMS の「メール」→「あんしんメルアドサービス」を開きます。</li>
+<li>SMTP 設定で、ID とパスワードを発行して控えます。</li>
+</ol>
+</div>
+<p class="note">画面名はRMSの更新で変わることがあります。見つからない場合は、RMSマニュアルを参照してください。利用可にするAPIは、楽天ペイ受注API（必須）だけで足ります。不要なAPIは利用可にしないでください。</p>
+</section>
+
+<section id="flow"><h2>3. 申込から稼働までの流れ</h2>
+<ol class="steps">
+<li><b>お問い合わせ</b>: <a href="mailto:ginzasugiden@gmail.com">ginzasugiden@gmail.com</a> へご連絡ください。</li>
+<li><b>ご案内</b>: 運営からサービスの案内と準備物の確認が届きます。</li>
+<li><b>招待コード受領</b>: 運営が招待コードを発行します（有効7日・一回限り）。</li>
+<li><b>登録（約15分）</b>: <a href="webui/onboard.html">登録ページ</a>（トップの「お申し込み」からも進めます）で、店舗情報・RMS キー・SMTP を入力し、規約とプライバシーポリシーに同意します。楽天への接続テストに成功すると登録完了です。ここから最大30日の無料トライアルが始まります。</li>
+<li><b>運営の確認・プレビュー</b>: 運営が内容を確認し、メール文面のプレビューをご案内します。</li>
+<li><b>試験運転（dry_run）</b>: お客様には送信せず、動作を確認します。管理画面のテスト送信で、店舗連絡先メール宛に文面を確認できます。</li>
+<li><b>稼働開始</b>: 稼働開始日以降に発送した注文から、自動送信が始まります。</li>
+<li><b>無料トライアル → 請求</b>: トライアル終了後、請求書でご案内します（月末締め翌月末払い）。</li>
+</ol>
+<p><b>所要日数の目安:</b> 登録は約15分。運営の確認から稼働開始までは、通常3〜7営業日が目安です（状況により前後します）。</p>
+<div class="cta noprint"><a class="btn" href="webui/onboard.html">招待コードをお持ちの方は登録へ</a><a class="btn ghost" href="mailto:ginzasugiden@gmail.com">お問い合わせ</a></div>
+</section>
+
+<section id="faq"><h2>4. よくある質問</h2>
+<details open><summary>自社のGmailにテストメールが届きません</summary><div>お客様宛のメールは、楽天のあんしんメルアド（マスクアドレス）経由で送られるため、一般のメールアドレス宛には届きません。管理画面の「テスト送信」は、店舗連絡先メールアドレス宛にのみ送信されます（他の宛先には送れません）。試験運転（dry_run）の間は、実際の送信は行われません。</div></details>
+<details open><summary>過去のお客様に一斉送信されませんか</summary><div>されません。稼働開始日以降に発送した注文だけが対象です。それ以前の注文には送りません。</div></details>
+<details open><summary>低評価のレビューをくださったお客様にもお礼メールが届きますか</summary><div>レビューお礼メールは、評価が低いもの（既定は星3未満）には自動送信しません。内容を確認して個別に対応することをおすすめします。基準は運営の設定によります。なお、発送後のフォローメールは評価とは別に、発送後の指定日数で送信されます。</div></details>
+<details open><summary>レビューお礼メールはどう届きますか</summary><div>管理画面（店舗ログイン→「レビュー取込」タブ）で、RMS「レビューチェックツール」の CSV をアップロードしてください。月1回の取り込みを想定しています。取り込み後、条件を満たす注文へ自動で送信されます。</div></details>
+<details open><summary>クーポンは使えますか</summary><div>クーポン発行機能は準備中です。現在は、フォローメール・レビューお礼メール・店舗分析をご提供しています。クーポンは、提供開始時に追加料金なしで有効化します。</div></details>
+<details open><summary>licenseKey の更新はどうすればよいですか</summary><div>RMS で新しいキーを発行し、管理画面の「認証情報」から更新してください。有効期限の30日前に運営者へ通知が届き、運営者から更新のお願いをご連絡します。</div></details>
+<details open><summary>メールを止めてほしいお客様がいます</summary><div>管理画面の「除外注文」タブに注文番号を登録してください（登録した注文にはフォロー・お礼メールを送りません。解除もできます）。または運営へご連絡ください。すでに送信済みのメールは取り消せません。</div></details>
+<details open><summary>解約したい</summary><div>解約を希望する月の前月末日までに、<a href="mailto:ginzasugiden@gmail.com">ginzasugiden@gmail.com</a> へお申し出ください。解約後のデータの扱いは<a href="terms.html#art8">利用規約第8条</a>をご覧ください。</div></details>
+
+<p class="note">1回（毎時）の実行で送信するメールは最大50件です。多数の注文がたまっている場合は、数回に分けて順次送信します。</p>
+</section>
+</div>
+</main>
+<footer><div class="wrap">
+  <nav>
+    <a href="terms.html">利用規約</a>
+    <a href="privacy.html">プライバシーポリシー</a>
+    <a href="company.html">運営者情報</a>
+    <a href="guide.html">ご利用開始ガイド</a>
+    <a href="mailto:ginzasugiden@gmail.com">お問い合わせ</a>
+  </nav>
+  ステップ侍 ／ 運営: 株式会社GSD（銀座杉伝）
+</div></footer>
+<script>
+(function () {
+  var b = document.getElementById('print-btn');
+  if (b) b.addEventListener('click', function () { window.print(); });
+})();
+</script>
+</body>
+</html>

@@ -90,3 +90,22 @@
 
 ## 7. クーポン
 クーポン経路の再有効化（`settings.coupon_enabled` ゲート・リクエスト修正・実発行テスト）は **未実施**（作業レポート参照）。現状は課金ガード（`runPipeline` 先頭）のみ適用され、`runHourlyFollowPipeline` はクーポンを呼ばない。LP のクーポン項目は「準備中」。
+
+## 8. 1店舗目 当日チェックリスト
+上から順に。各項目が OK になってから次へ進む（`- [ ]` に印を付ける）。「戻し方」は NG のときの対処。メール文面は `docs/ops/EMAIL_TEMPLATES.md`（②〜④）。
+レビューお礼メールは**店舗によるCSV取込（月1回を目安）**で動く。`review_thanks_since` 等の安全ゲート（未設定なら送らない）は運営が設定する（`docs/REVIEW_THANKS.md`）。
+
+| 済 | 手順 | どこで確認するか | NG のときの戻し方 |
+|---|---|---|---|
+| - [ ] | 1. 招待発行 | admin.html「作成して招待コードを発行」→ 招待コード（有効7日・一回限り）を店舗へ送付（メール②） | 期限切れ・紛失は再発行。店舗IDの誤りは作成し直す（setup 状態のためパイプライン対象外） |
+| - [ ] | 2. 登録通知 | 店舗が onboard で RMS 接続テストに成功すると申込完了の通知メールが届く。admin.html で `billing_status=trial`・`trial_end`（今日+30日）を確認（§1・§3） | 通知が無い・trial 期間が空: 登録失敗（接続テストNG）の可能性。店舗にキー・申請状況の再確認を依頼し、招待を再発行 |
+| - [ ] | 3. 規約同意の記録 | admin.html のテナント詳細「規約同意：v1.0 / 日時」。裏付けは `billing_events` の `terms_agreed`。**「規約同意：記録なし」なら NG** | 稼働させない（active 化しない）。店舗に onboard で規約・プライバシーポリシーへ同意し直してもらう（同意なしでは登録できない仕様）。経緯は `billing_note` に記録 |
+| - [ ] | 4. sid と署名 | テナント詳細の設定一覧で `sid`（RMS店舗ID・数字。店舗URL `https://www.rakuten.co.jp/○○/` に対応）と店舗署名（`sname`/`sid` から自動生成。`shop_signature_override` で上書き可）が正しいこと。「操作」→ RMS 接続チェックが 200 | `set_tenant_setting`（「設定」タブ）で sid / `shop_signature_override` を修正し、接続チェックをやり直す。キーが原因なら「操作」→ 認証情報で再登録 |
+| - [ ] | 5. go_live_date（未来日） | 「設定」タブ `go_live_date` が**今日より後の日付**（店舗希望日と合意。ログ一覧の「稼働開始日」列にも出る）。この日以降に発送した注文だけが対象（§6-2） | 過去日だと active 化がブロックされる。`go_live_date` を未来日に直す。誤って過去に遡る設定にしない（過去の注文へ一斉送信になる） |
+| - [ ] | 6. follow_days | 「設定」タブ `follow_days_after_ship`（既定5日。店舗と合意）が数値であること。空・不正だと安全のため全件スキップされる（`docs/MANUAL_DAILY.md`） | 数値を設定し直す。active 化は前提（認証情報・go_live_date・follow_days・follow_v1 文面）が揃わないと拒否される |
+| - [ ] | 7. 文面のプレビュー | 店舗に管理画面（index.html）の文面とテスト送信で確認してもらう（宛先は店舗メール固定。dry_run=true の間は送られずログのみなので、確認時のみ一時的に dry_run=false にして1通送り、必ず true に戻す＝`docs/ONBOARDING.md`） | 文面の修正は「文面」で行い再テスト。dry_run を戻し忘れたら直ちに `dry_run=true` に戻す |
+| - [ ] | 8. dry_run 1〜2日 | `dry_run=true` のまま 1〜2日運転。`pipeline_log` で当該テナントの `hourly_done` が出て、`sends` タブに実送信（result=sent）が**増えていない**こと。同期済みの注文数（`follow_days_after_ship` 経過済み）も確認（§6-2） | 想定外の対象件数・エラー（`tenant_warn`）: 原因を直すまで次へ進まない。`go_live_date` の見直し、必要なら除外注文に登録 |
+| - [ ] | 9. active 化 | 直前に `go_live_date` と対象件数を再確認 → 「設定」で `dry_run=false`（確認ダイアログあり）→「操作」で状態を `active`。毎時トリガーは `setupTriggers` で登録済みであること（`docs/GO_LIVE.md` (6)） | 異常があれば `dry_run=true` に戻し、状態を paused にする。全体を止める場合は `docs/GO_LIVE.md` (7)（グローバル `DRY_RUN=true`・トリガー削除） |
+| - [ ] | 10. pipeline_log の確認と初回送信 | マスターシート `pipeline_log` の `tenant_id=_hourly` で `hourly_start` と `hourly_done` が**同じ `run=` で並ぶ**こと（§4-2）。`hourly_incomplete` / `hourly_gap` が出ていないこと。続けて、テナントシート `sends` タブに `result=sent` が追加され、送信件数・エラーが想定内であること | `hourly_start` だけで終わる／`gap`: トリガー一覧（`runHourlyFollowPipeline` 毎時）を確認。想定件数と大きく違えば `dry_run=true` に戻して調査（`docs/GO_LIVE.md` (5)(7)） |
+| - [ ] | 11. 稼働開始のお知らせ（メール④） | 初回送信日時・件数・確認結果を `sends` / `pipeline_log` から転記して送付 | 件数や結果に不明点があるうちは送らず、原因確認後に送る |
+| - [ ] | 12. freee に取引先登録とトライアル終了日のメモ | freee に取引先を登録し、`trial_end` をメモ（⑤を送る日＝`trial_end` の7日前）。`checkBillingDaily` の一覧メール（期限7日前・当日・切れ）でも把握できる（§4）。管理画面の課金欄に `billing_note` を残す | 登録漏れに気づいたら、トライアル終了前に freee で請求書を発行・送付（§3）。入金確認後に `billing_status=active` |

@@ -84,7 +84,8 @@
 ## 6-3. 解約済みテナントの削除（purge_tenant）
 管理画面 →「操作」→「解約済みテナントの完全削除」（API `purge_tenant`）。**実行は運営の判断で行う。** 前提は ① status=`disabled` ② 店舗IDを再入力して一致 ③ 事前複製に成功。tokyoflower は常に拒否。
 - 実行前に Drive へ `purge_backup_<id>_<日時>`（専用シートの複製）と `purge_backup_master_<id>_<日時>`（`tenants` 行・`billing_events`。暗号文・パスワードのハッシュは含めない）を作る。失敗したら何も消さない。
-- 削除: `tenant_secrets`・`tenant_auth`・`invites`・Script Properties（`REVIEW_INGEST_KEY__<id>` / `ANALYTICS_BACKFILL_CURSOR__<id>`）・マスター `tenants` 行（最後）。専用シートは `PURGED_<id>_<日時>` に改名するだけで消さない（店舗への譲渡または削除は人が行う）。
+- 削除: `tenant_secrets`・`tenant_auth`・`invites`・Script Properties（`REVIEW_INGEST_KEY__<id>` / `ANALYTICS_BACKFILL_CURSOR__<id>`）・マスター `tenants` 行（最後）。専用シートは `PURGED_<id>_<日時>` に改名するだけで消さない。**規約どおり、purge_tenant 実行後に運営が専用シート（`PURGED_`）と複製（`purge_backup_`）を解約日から30日以内に削除する**（人の作業）。`billing_events`（規約同意の記録を含む）と `pipeline_log` は残る。
+- **期限管理**: 解約を受けたら、freee／カレンダーに「削除予定日（解約日+30日以内）」をメモしておく。
 - `billing_events` に `purge_started` / `purge_tenant`（複製IDつき）を記録。途中で失敗した場合はマスター行が残るので、原因を直して同じ操作をやり直せる。
 - 手作業で残るもの: `smtp_bridge` の `config.php`（旧方式の SMTP 設定）、複製の保管期限の判断、ECOS 側の転送設定。
 
@@ -93,7 +94,7 @@
 
 ## 8. 1店舗目 当日チェックリスト
 上から順に。各項目が OK になってから次へ進む（`- [ ]` に印を付ける）。「戻し方」は NG のときの対処。メール文面は `docs/ops/EMAIL_TEMPLATES.md`（②〜④）。
-レビューお礼メールは**店舗によるCSV取込（月1回を目安）**で動く。`review_thanks_since` 等の安全ゲート（未設定なら送らない）は運営が設定する（`docs/REVIEW_THANKS.md`）。
+レビューお礼メールは**店舗によるCSV取込（月1回を目安）**で動く。ECOS の自動取込は tokyoflower 専用で、外部店舗は店舗の月1回CSV取込のみ。`review_thanks_since` 等の安全ゲート（未設定なら送らない）は運営が設定する（`docs/REVIEW_THANKS.md`、項目13）。
 
 | 済 | 手順 | どこで確認するか | NG のときの戻し方 |
 |---|---|---|---|
@@ -103,9 +104,10 @@
 | - [ ] | 4. sid と署名 | テナント詳細の設定一覧で `sid`（RMS店舗ID・数字。店舗URL `https://www.rakuten.co.jp/○○/` に対応）と店舗署名（`sname`/`sid` から自動生成。`shop_signature_override` で上書き可）が正しいこと。「操作」→ RMS 接続チェックが 200 | `set_tenant_setting`（「設定」タブ）で sid / `shop_signature_override` を修正し、接続チェックをやり直す。キーが原因なら「操作」→ 認証情報で再登録 |
 | - [ ] | 5. go_live_date（未来日） | 「設定」タブ `go_live_date` が**今日より後の日付**（店舗希望日と合意。ログ一覧の「稼働開始日」列にも出る）。この日以降に発送した注文だけが対象（§6-2） | 過去日だと active 化がブロックされる。`go_live_date` を未来日に直す。誤って過去に遡る設定にしない（過去の注文へ一斉送信になる） |
 | - [ ] | 6. follow_days | 「設定」タブ `follow_days_after_ship`（既定5日。店舗と合意）が数値であること。空・不正だと安全のため全件スキップされる（`docs/MANUAL_DAILY.md`） | 数値を設定し直す。active 化は前提（認証情報・go_live_date・follow_days・follow_v1 文面）が揃わないと拒否される |
-| - [ ] | 7. 文面のプレビュー | 店舗に管理画面（index.html）の文面とテスト送信で確認してもらう（宛先は店舗メール固定。dry_run=true の間は送られずログのみなので、確認時のみ一時的に dry_run=false にして1通送り、必ず true に戻す＝`docs/ONBOARDING.md`） | 文面の修正は「文面」で行い再テスト。dry_run を戻し忘れたら直ちに `dry_run=true` に戻す |
+| - [ ] | 7. 文面のプレビュー | 管理画面にレンダリング済みプレビュー機能は無い。運営が当該テナントのテナントシート `templates` タブ（無ければ `docs/MAIL_TEMPLATES.md` の既定文面）の follow_v1 をメールで店舗へ送り、ご確認・修正希望を受ける（メール③の流れ）。店舗の「テスト送信」はフォローメール（follow_v1）のみ・宛先は店舗連絡先メール固定で、dry_run=true の間は送信されない | 修正希望は「文面」（`templates` タブ）で直して再送し、承認を得てから次へ。文面を直し損ねたら直前の版に戻す。テスト送信のために dry_run=false にした場合は、直ちに `dry_run=true` に戻す |
 | - [ ] | 8. dry_run 1〜2日 | `dry_run=true` のまま 1〜2日運転。`pipeline_log` で当該テナントの `hourly_done` が出て、`sends` タブに実送信（result=sent）が**増えていない**こと。同期済みの注文数（`follow_days_after_ship` 経過済み）も確認（§6-2） | 想定外の対象件数・エラー（`tenant_warn`）: 原因を直すまで次へ進まない。`go_live_date` の見直し、必要なら除外注文に登録 |
-| - [ ] | 9. active 化 | 直前に `go_live_date` と対象件数を再確認 → 「設定」で `dry_run=false`（確認ダイアログあり）→「操作」で状態を `active`。毎時トリガーは `setupTriggers` で登録済みであること（`docs/GO_LIVE.md` (6)） | 異常があれば `dry_run=true` に戻し、状態を paused にする。全体を止める場合は `docs/GO_LIVE.md` (7)（グローバル `DRY_RUN=true`・トリガー削除） |
+| - [ ] | 9. active 化 | 直前に `go_live_date` と対象件数を再確認 → 「設定」で `dry_run=false`（確認ダイアログあり）→「操作」で状態を `active`。毎時トリガーは `setupTriggers` で登録済みであること（`docs/GO_LIVE.md` (6)） | 異常があれば `status=paused` ＋ `settings.dry_run=true` に戻す。自動送信は paused で止まるが、店舗の「テスト送信」は paused でも dry_run=false だと店舗連絡先宛に1通届くため、dry_run=true を併用する。完全停止は `disabled`＋トークン失効（revoke。既発行のトークン／セッションは disabled だけでは残る）。全体を止める場合は `docs/GO_LIVE.md` (7)（グローバル `DRY_RUN=true`・トリガー削除） |
 | - [ ] | 10. pipeline_log の確認と初回送信 | マスターシート `pipeline_log` の `tenant_id=_hourly` で `hourly_start` と `hourly_done` が**同じ `run=` で並ぶ**こと（§4-2）。`hourly_incomplete` / `hourly_gap` が出ていないこと。続けて、テナントシート `sends` タブに `result=sent` が追加され、送信件数・エラーが想定内であること | `hourly_start` だけで終わる／`gap`: トリガー一覧（`runHourlyFollowPipeline` 毎時）を確認。想定件数と大きく違えば `dry_run=true` に戻して調査（`docs/GO_LIVE.md` (5)(7)） |
 | - [ ] | 11. 稼働開始のお知らせ（メール④） | 初回送信日時・件数・確認結果を `sends` / `pipeline_log` から転記して送付 | 件数や結果に不明点があるうちは送らず、原因確認後に送る |
 | - [ ] | 12. freee に取引先登録とトライアル終了日のメモ | freee に取引先を登録し、`trial_end` をメモ（⑤を送る日＝`trial_end` の7日前）。`checkBillingDaily` の一覧メール（期限7日前・当日・切れ）でも把握できる（§4）。管理画面の課金欄に `billing_note` を残す | 登録漏れに気づいたら、トライアル終了前に freee で請求書を発行・送付（§3）。入金確認後に `billing_status=active` |
+| - [ ] | 13. 外部店舗のレビューお礼の安全ゲート | 運営が当該テナントの settings に `review_thanks_since`（未設定なら送らない）と `review_thanks_min_rating`（既定3。これ未満は自動送信しない）を設定。確認場所は admin.html のテナント詳細「設定」タブ（`set_tenant_setting`）。店舗のCSV取込（月1回目安）の前に設定する。ECOS の自動取込は tokyoflower 専用 | 想定外の対象が出たら `review_thanks_since` を空に戻す（未設定＝送らない）か `dry_run=true` にして調査 |

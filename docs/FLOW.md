@@ -7,7 +7,7 @@
 ```
 [楽天RMS API] --fetchOrders--> orders シート
                                    |
-                 (review_fetcher.py: Selenium, 本リポジトリ外) --> reviews シート
+                 (Chrome拡張 ext_ingest_reviews / CSV取込 import_reviews / tokyoflower は ECOS 経由 ingest_reviews) --> reviews シート
                                    |
                           linkOrdersReviews (orders.review_linked を更新)
                                    |
@@ -29,7 +29,7 @@
 | # | ステップ / 関数 | 起動方法 | 読むシート・列 | 書くシート・列 | 判定条件 |
 |---|---|---|---|---|---|
 | 1 | 受注取得 `fetchOrders(tenantId)`（rakuten_api.gs:17） | `runPipeline`内から自動呼び出し。手動: `testFetchOrders()` | 楽天RMS API `order/searchOrder`・`order/getOrder`（過去7日分、進行ステータス100-700=キャンセル除く）。orders シートは既存行upsert判定のため全件読む | `orders`: order_number, order_date, buyer_key, masked_email, buyer_name, item_code, item_name, amount, purchase_count(固定1), prefecture, ship_date, status, review_linked（既存値維持） | API取得範囲は過去7日固定。order_numberが一致すれば上書き、なければ追加 |
-| 2 | レビュー取得 `fetchReviews(tenantId)`（rakuten_api.gs:118） | `runPipeline`内、ただし**無効化済み**（本体コメントアウト） | なし（呼んでもログのみ） | なし | 2026-07-05に楽天レビューAPI(`/es/2.0/review/list/`)が404となり本体を無効化。実データは外部の **`review_fetcher.py`（Selenium・本リポジトリに含まれない）** が `reviews` シートへ直接書き込む運用に一本化 |
+| 2 | レビュー取得 `fetchReviews(tenantId)`（rakuten_api.gs:118） | `runPipeline`内、ただし**無効化済み**（本体コメントアウト） | なし（呼んでもログのみ） | なし | 2026-07-05に楽天レビューAPI(`/es/2.0/review/list/`)が404となり本体を無効化。レビューは次の経路で `reviews` シートへ取り込む: ① 店舗配布の Chrome 拡張（`doPost action=ext_ingest_reviews`、`reviews_ext.gs`。店舗自身がログインした RMS の画面から5項目だけを取得し、レビュー取込専用トークンで送信）② 管理画面の CSV アップロード（`import_reviews`、`reviews_import.gs`）③ tokyoflower のみ ECOS 経由（`ingest_reviews`、`reviews_ingest.gs`。`settings.review_ingest_enabled=true` のとき）。いずれも店舗の RMS ログイン情報を運営は預からない |
 | 3 | 受注⇄レビュー紐づけ `linkOrdersReviews(tenantId)`（rakuten_api.gs:164） | `runPipeline`内。手動: `testLinkOrdersReviews()` | `reviews`: order_number(2列目)。`orders`: order_number, review_linked | `orders.review_linked` を `'true'` に更新 | reviewsシートに同一order_numberの行が1件でもあれば紐づけ済みとする |
 | 4 | クーポン判定 `evaluateCoupons(tenantId)`（coupon_engine.gs:55） | `runPipeline`内。手動: `testEvaluateCoupons()`（発行はしない） | `orders`: status, review_linked, buyer_key, order_number, purchase_count, ship_date。`coupons`: buyer_key(2列目), rule_id(3列目), api_result(6列目、issuedSet構築用) | なし（対象リストを返すのみ） | ①status≠cancelled ②ship_date存在 ③ship_date≧GO_LIVE_DATE ④now−ship_date≧5日 ⑤ルールのpurchase_count範囲内 ⑥requires_review=trueなら review_linked=true必須 ⑦(buyer_key, rule_id)がcoupons側で未発行（ERROR行は無視＝再挑戦可） |
 | 5 | クーポン発行 `issueCoupon(tenantId, target)`（rakuten_api.gs:189） | `runPipeline`内（`isDryRun_()`がtrueならスキップしてログのみ）。手動: `testIssueOneCoupon(orderNumber, ruleId)` **注: DRY_RUNの状態に関わらず常に実発行**、`testPipelineTokyoflower()` **こちらもDRY_RUNチェックなしで常に実発行** | `coupons`シートへの追記のみ（読み取りは無し） | `coupons`: coupon_id, buyer_key, rule_id, issued_at, valid_until, api_result（失敗時 `ERROR:` 接頭辞） | 楽天Coupon API `POST /es/1.0/coupon/issue`（XML）へ実際にリクエストする外部副作用。開始日時は現在+65分固定 |
@@ -47,7 +47,8 @@
 | `runFollowMailsOnly()`（main.gs:168） | フォローメール送信のみ。クーポン経路（evaluateCoupons/issueCoupon）もfetchOrders等も一切呼ばず、現在のordersシートのスナップショットに対して判定 | DRY_RUN=trueなら送信されず安全にログのみ |
 | `testIssueOneCoupon(orderNumber, ruleId)`（main.gs:136） | 指定注文1件だけクーポンを**強制本発行**しメール送信するテスト用 | **DRY_RUNを無視して常に実発行**（コード内コメントに明記）。sendCouponMail呼び出し自体はisDryRun_チェックあり |
 | `testPipelineTokyoflower()`（main.gs:175） | tokyoflower限定でパイプライン全体を手動実行 | **issueCoupon呼び出しにDRY_RUN分岐が無い**＝実行するとDRY_RUNの値に関わらず対象注文全件に実際のクーポンが発行される。sendCouponMail/sendPendingMailsの送信自体はisDryRun_で止まる |
-| `review_fetcher.py`（本リポジトリに存在しない・楽天レビューページをSeleniumでスクレイピングし`reviews`シートへ直接書き込む外部スクリプトとの想定。main.gsやrakuten_api.gsのコメントにのみ言及あり） | レビュー取得の実運用ルート | 本ドキュメントのコード読解の範囲では実体を確認できていない |
+| `handleExtIngestReviews_`（reviews_ext.gs。`doPost action=ext_ingest_reviews`） | 店舗配布の Chrome 拡張からのレビュー取込（レビュー取込専用トークンで tenant を解決し、5項目だけを `reviews` へ冪等 upsert） | 受信ごとに最終受信日時を記録。日次の `checkExtStale_` で、status=active かつ受信実績のあるテナントについて、最終受信から3日を超えると運営宛にメール通知 |
+| `handleIngestReviews_`（reviews_ingest.gs。`doPost action=ingest_reviews`） | tokyoflower 専用の ECOS 経由の取込（`REVIEW_INGEST_KEY__<tenant_id>` で認証） | `settings.review_ingest_enabled=true` のテナントのみ受信 |
 
 ## 3. トリガー登録状況
 

@@ -60,7 +60,7 @@ GASエディタで `runFollowMailsOnly` を手動実行する。
 ## (8) 保留事項（本番GO時点での既知の未解決課題）
 
 - **クーポンAPI**: 楽天Coupon API（`/es/1.0/coupon/issue`, XML形式）の仕様が未解決のため、`runHourlyFollowPipeline`はクーポン経路（evaluateCoupons/issueCoupon）を呼ばない設計にしている。クーポン配信を有効化するには別途このAPI仕様の確認・検証が必要
-- **review_fetcher.py の常時稼働**: レビュー取得はSelenium版`review_fetcher.py`（本リポジトリ外）が担っているが、新しいPCでのタスクスケジューラ登録がまだ済んでいない。これが動いていないと`reviews`タブが更新されず、クーポン判定（レビュー必須条件）が機能しない
+- **レビュー取得の経路**: `reviews`タブは、外部店舗では店舗配布の Chrome 拡張（`ext_ingest_reviews`。店舗自身が RMS にログインした画面から取得）または管理画面の CSV アップロードで更新される。tokyoflower は ECOS 経由（`ingest_reviews`。`settings.review_ingest_enabled=true`、CLAUDE.md 参照）。これらが動いていないと`reviews`タブが更新されず、お礼メールの判定やレビュー必須条件のクーポン判定が機能しない。拡張の受信が3日を超えて途絶えると運営宛にメール通知される（手順は `docs/OPERATOR_ONBOARDING.md`）
 - **ship_date空欄の注文の扱い**: 監査時点で「shipped」ステータスなのに`ship_date`が空の注文が多数存在することを確認済み（件数・一覧は監査報告参照）。これらはフォローメール対象の判定から現状単純に除外されているが、根本原因（RMS API応答に出荷日が含まれないケースがある等）の調査と対応方針は未定
 
 ## (9) GAS リリース手順（コード反映と WebApp デプロイ更新）

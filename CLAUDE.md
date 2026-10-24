@@ -51,3 +51,11 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - `previewReviewIngestStatusTokyoflower()` — 設定・キー登録有無・reviews 行数・matched/unmatched（読み取りのみ）
 - `dryRunReviewThanksTokyoflower()` — お礼メールの対象一覧を送らずにログ出力
 - `ensureReviewIngestSettingsTokyoflower()` — settings に不足キー（`review_ingest_enabled` 等）を追記
+
+### 拡張機能経由のレビュー取込（外部店舗向け・2026-10-24〜）
+- 店舗配布用 Chrome 拡張（`extension/`、v1.0.0）→ GAS `doPost action=ext_ingest_reviews`（ECOS は経由しない）。送るのは review_type / review_id(詳細URL) / rating / posted_at / order_number の5項目だけ。
+- 認証: 管理画面のテナント詳細「操作」タブで発行する専用トークン（`tenant_auth` の `kind='ext_review'`、ハッシュのみ保存、テナントにつき有効1つ）。`verifyTenantToken_` / `revokeTenantToken_` は ext_review を扱わない（管理画面 API には使えない）。
+- 受信: status が active/setup かつ課金OKのみ。`dry_run=true` は書かない。`review_ingest_enabled` は不要（ECOS 経路専用）。
+- 日次 `checkExtStale_`: active で受信実績があり最終受信から3日超のテナントを ADMIN_EMAIL へ通知（1日1回）。
+- 解約: purge の後に管理画面「最終削除」（`final_delete_tenant`）で PURGED_ シートと複製をゴミ箱へ移す（tenant_id 再入力）。
+- 配布 zip: `node tools/build-extension.js`（`dist/` は git 管理外）。ストア申請文書は `docs/store/`。規約は v1.1（`TERMS_VERSION` は `gas/src/onboarding.gs` と `webui/onboard.js` を同時に更新）。

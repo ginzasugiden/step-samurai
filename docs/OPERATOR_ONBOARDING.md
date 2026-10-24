@@ -84,18 +84,18 @@
 ## 6-3. 解約済みテナントの削除（purge_tenant）
 管理画面 →「操作」→「解約済みテナントの完全削除」（API `purge_tenant`）。**実行は運営の判断で行う。** 前提は ① status=`disabled` ② 店舗IDを再入力して一致 ③ 事前複製に成功。tokyoflower は常に拒否。
 - 実行前に Drive へ `purge_backup_<id>_<日時>`（専用シートの複製）と `purge_backup_master_<id>_<日時>`（`tenants` 行・`billing_events`。暗号文・パスワードのハッシュは含めない）を作る。失敗したら何も消さない。
-- 削除: `tenant_secrets`・`tenant_auth`・`invites`・Script Properties（`REVIEW_INGEST_KEY__<id>` / `ANALYTICS_BACKFILL_CURSOR__<id>`）・マスター `tenants` 行（最後）。専用シートは `PURGED_<id>_<日時>` に改名するだけで、purge では消さない。**purge_tenant 実行後、解約日から30日以内に、運営が「最終削除」（下記）で専用シート（`PURGED_`）と複製2つ（`purge_backup_` / `purge_backup_master_`）を Drive のゴミ箱へ移す**（人の作業）。`billing_events`（規約同意の記録を含む）と `pipeline_log` は残る。
+- 削除: `tenant_secrets`・`tenant_auth`・`invites`・Script Properties（`REVIEW_INGEST_KEY__<id>` / `ANALYTICS_BACKFILL_CURSOR__<id>`）・マスター `tenants` 行（最後）。専用シートは `PURGED_<id>_<日時>` に改名するだけで、purge では消さない。**23日目のリマインド（下記）が届いたら、同じ日に purge_tenant と「最終削除」（下記）を続けて実行し、専用シート（`PURGED_`）と複製2つ（`purge_backup_` / `purge_backup_master_`）を Drive のゴミ箱へ移す**（人の作業。いずれも解約日から30日以内）。`billing_events`（規約同意の記録を含む）と `pipeline_log` は残る。
 - **最終削除（`final_delete_tenant`）**: 管理画面 →「purge 済みテナントの最終削除」（ページ下部のセクション）。purge 済みの店舗が対象。
   1. 「tenant_id」に purge 済みの店舗IDを入力し、「確認のためもう一度 tenant_id」に同じ値を再入力（一致しないと拒否）。
   2. 「ゴミ箱へ移す…」を押し、確認ダイアログで OK。
   3. 結果欄に「ゴミ箱へ移したファイル数: N / 3」と、スキップ（名前が想定と違う／取得できない／すでにゴミ箱／ID特定不可／移動失敗）が表示される。**スキップがあるファイルは触られていない**ので、Drive で該当ファイルを確認し、必要なら Drive で手で処理する。**1件でもゴミ箱へ移せた後は「すでに最終削除を実行済み」として再実行できない**（二重実行防止）ので、スキップ分は Drive から直接処理する。
-  4. これは**完全削除ではない**。Drive のゴミ箱へ移すだけで、ゴミ箱の中身は Drive の仕様により約30日後に完全削除される（それまでは復元できる）。規約第8条の「30日以内」は、purge と最終削除（ゴミ箱へ移す）までを指す。
+  4. これは**完全削除ではない**。Drive のゴミ箱へ移すだけで、ゴミ箱の中身は Drive の仕様により最大30日後に完全削除される（それまでは復元できる）。規約第8条の「30日以内」は、purge と最終削除（ゴミ箱へ移す）までを指し、ゴミ箱での最大30日間は含まない（規約・プライバシーにもその旨を記載済み）。
   - 対象は、purge 時の複製2つ（専用シートの複製・マスター行の複製）と、`PURGED_` に改名した専用シート。名前が `PURGED_<id>_<日時>` / `purge_backup_<id>_<日時>` / `purge_backup_master_<id>_<日時>` の形式のものだけを移す。tokyoflower は常に拒否。二重実行は拒否（`billing_events` の `final_delete` で判定）。
-  - 解約の流れの全体: 解約日に `disabled`（＋レビュー取込トークンを 6-4 の「失効」で失効）→ `purge_tenant` → `final_delete_tenant`。
-- **期限管理**: 解約を受けたら、freee／カレンダーに「削除予定日（解約日+30日以内。purge と最終削除の両方）」をメモしておく。
+  - 解約の流れの全体: 解約日に `disabled`（＋レビュー取込トークンを 6-4 の「失効」で失効）→（23日目のリマインドを受けて、同日に）`purge_tenant` → `final_delete_tenant`。解約日からの日数: 0日目 disabled ／ 23日目 リマインド＋purge＋最終削除 ／ 30日目 削除期限 ／ 最大でおよそ53日目（23日目＋ゴミ箱30日）に Drive から完全消去。
+- **期限管理**: 解約を受けたら、freee／カレンダーに「削除予定日（解約日+23日目に purge と最終削除を同時実施。期限は解約日+30日）」をメモしておく。
 - **削除リマインド（自動）**: `checkBillingDaily`（毎日9時）が、status=`disabled` で未 purge のテナントについて、**disabled にした日から23日以上**経つと `ADMIN_EMAIL` に通知する（テナントID・disabled になった日・削除期限＝disabled日+30日・「purge_tenant を実行してください」）。同じテナントへは**1日1回まで**（`billing_events` の `purge_reminder_sent`）。`ADMIN_EMAIL` 未設定ならログのみ。
   - 起点は、管理画面で status を `disabled` にした時点で `billing_events` に残る `status_disabled` の日付。この機能の導入前から disabled の店舗（demo 等）は記録が無いので、**初回検知時に `disabled_observed` を追記して「その日」を起点**にし、その1回だけ「disabled日の記録なし（本日を起点に記録）」付きで通知する（以後は起点+23日から再開）。
-  - 通知が届いたら `purge_tenant` を実行し、続けて最終削除（ゴミ箱へ移す）を**解約日から30日以内**に行う（purge 後は通知されない。最終削除の忘れ防止の通知は無いので、カレンダーのメモで管理する）。
+  - 通知（23日目）が届いたら、**同じ日に** `purge_tenant` を実行し、続けて最終削除（ゴミ箱へ移す）を行う（いずれも解約日から30日以内。purge 後は通知されないので、purge と最終削除は分けず同時に済ませる）。
 - `billing_events` に `purge_started` / `purge_tenant`（複製IDつき）を記録。途中で失敗した場合はマスター行が残るので、原因を直して同じ操作をやり直せる。
 - 手作業で残るもの: `smtp_bridge` の `config.php`（旧方式の SMTP 設定）、複製の保管期限の判断、ECOS 側の転送設定。
 

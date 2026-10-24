@@ -1,7 +1,7 @@
 # ステップ侍 ご利用開始ガイド（お客様向け）
 
 公開版: https://step-samurai.ginzasugiden.com/guide.html （本書と内容を揃えています。変更時は両方を更新）
-運営: 株式会社GSD（銀座杉伝） ／ 問い合わせ: ginzasugiden@gmail.com ／ 規約: terms.html（版1.1・2026年10月24日施行）・privacy.html・company.html
+運営: 株式会社GSD（銀座杉伝） ／ 問い合わせ: ginzasugiden@gmail.com ／ 規約: terms.html（版1.1・2026年10月25日施行）・privacy.html・company.html
 
 楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを店舗名義で自動送信するサービスです。
 

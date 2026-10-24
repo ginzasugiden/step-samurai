@@ -57,5 +57,5 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - 認証: 管理画面のテナント詳細「操作」タブで発行する専用トークン（`tenant_auth` の `kind='ext_review'`、ハッシュのみ保存、テナントにつき有効1つ）。`verifyTenantToken_` / `revokeTenantToken_` は ext_review を扱わない（管理画面 API には使えない）。
 - 受信: status が active/setup かつ課金OKのみ。`dry_run=true` は書かない。`review_ingest_enabled` は不要（ECOS 経路専用）。
 - 日次 `checkExtStale_`: active で受信実績があり最終受信から3日超のテナントを ADMIN_EMAIL へ通知（1日1回）。
-- 解約: purge の後に管理画面「最終削除」（`final_delete_tenant`）で PURGED_ シートと複製をゴミ箱へ移す（tenant_id 再入力）。
+- 解約: 23日目のリマインドで purge と、続けて管理画面「最終削除」（`final_delete_tenant`）で PURGED_ シートと複製をゴミ箱へ移す（tenant_id 再入力）。
 - 配布 zip: `node tools/build-extension.js`（`dist/` は git 管理外）。ストア申請文書は `docs/store/`。規約は v1.1（`TERMS_VERSION` は `gas/src/onboarding.gs` と `webui/onboard.js` を同時に更新）。

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ステップ侍 レビュー取込 設定</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="page">
+  <h1>ステップ侍 レビュー取込 設定</h1>
+
+  <h2>店舗トークン</h2>
+  <p>step-samurai の管理画面で発行した「拡張連携トークン」を入力して保存してください。</p>
+  <p class="muted">保存済み: <span id="saved">なし</span></p>
+  <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="sse_ から始まるトークン">
+  <div class="row">
+    <button id="save" type="button">保存</button>
+    <button id="remove" type="button" class="secondary">削除</button>
+    <button id="test" type="button" class="secondary">送信テスト</button>
+  </div>
+  <p id="message" role="status"></p>
+
+  <h2>取得する項目（5項目だけ）</h2>
+  <table>
+    <tr><th>項目</th><th>用途</th></tr>
+    <tr><td>レビュータイプ</td><td>レビューの種類の判別</td></tr>
+    <tr><td>レビュー詳細URL</td><td>レビューの識別（重複防止）</td></tr>
+    <tr><td>評価</td><td>低評価の除外など</td></tr>
+    <tr><td>投稿日時</td><td>お礼メールの送信時期の判定</td></tr>
+    <tr><td>注文番号</td><td>受注との突合</td></tr>
+  </table>
+  <p class="muted">商品名・タイトル・レビュー本文・購入者情報は取得しません。RMS の ID・パスワード・Cookie は読み取りも保存も送信もしません。</p>
+
+  <h2>拡張機能が使う権限</h2>
+  <ul>
+    <li>review.rms.rakuten.co.jp: ログイン済みのレビューチェックツールから、上記5項目を含む CSV を取得するため。</li>
+    <li>script.google.com / script.googleusercontent.com: 取得した5項目を、店舗自身の step-samurai（Google Apps Script）に送信するため。</li>
+    <li>storage: トークンと前回の同期日時などを、この端末のブラウザに保存するため。</li>
+    <li>alarms: 1日1回、前回の同期から日数が経っていないか確認してバッジで知らせるため。</li>
+  </ul>
+
+  <h2>プライバシーポリシー</h2>
+  <p><a id="privacy" href="#" target="_blank" rel="noopener">プライバシーポリシーを開く</a></p>
+</div>
+<script src="lib/config.js"></script>
+<script src="lib/time.js"></script>
+<script src="lib/sender.js"></script>
+<script src="lib/state.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

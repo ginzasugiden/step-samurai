@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ステップ侍 レビュー取込</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="wrap popup">
+  <h1>ステップ侍 レビュー取込</h1>
+  <p><span id="level" class="badge info"></span> <strong id="headline"></strong></p>
+  <p id="detail"></p>
+  <p class="muted">最終同期: <span id="last"></span></p>
+  <div class="row">
+    <button id="sync" type="button">今すぐ同期</button>
+    <a id="settings" href="#">設定を開く</a>
+  </div>
+  <div id="guide" class="box" hidden>
+    <p>RMS のレビューチェックツールを開いてから、もう一度押してください。</p>
+    <p><a href="https://review.rms.rakuten.co.jp/" target="_blank" rel="noopener">楽天 RMS のレビューチェックツールを開く</a></p>
+  </div>
+  <p id="result" class="muted"></p>
+</div>
+<script src="lib/config.js"></script>
+<script src="lib/time.js"></script>
+<script src="lib/state.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

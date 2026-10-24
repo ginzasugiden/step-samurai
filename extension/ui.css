@@ -1,0 +1,20 @@
+:root { color-scheme: light; --fg: #1f2937; --muted: #6b7280; --line: #e5e7eb; --accent: #1d4ed8; --ok: #15803d; --warn: #b45309; --err: #b91c1c; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.6 "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif; color: var(--fg); background: #fff; }
+.wrap { padding: 16px; }
+.popup { width: 340px; }
+.page { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 16px; margin: 0 0 8px; }
+h2 { font-size: 15px; margin: 24px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+p, li { margin: 4px 0; }
+.muted { color: var(--muted); font-size: 12px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; background: var(--muted); }
+.badge.ok { background: var(--ok); } .badge.warn { background: var(--warn); } .badge.error { background: var(--err); } .badge.info { background: var(--accent); }
+button { font: inherit; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+button.secondary { background: #fff; color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=password], input[type=text] { width: 100%; padding: 6px 8px; font: inherit; border: 1px solid #9ca3af; border-radius: 6px; }
+a { color: var(--accent); }
+.row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: #f9fafb; }
+table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; font-size: 13px; }

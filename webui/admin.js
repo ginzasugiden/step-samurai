@@ -220,7 +220,7 @@ $('final-btn').addEventListener('click', async () => {
   const id = $('final-id').value.trim(), confirmId = $('final-confirm').value.trim();
   if (!id) { show('final-result', FINAL_DELETE_ERRORS.tenant_id_required); return; }
   if (confirmId !== id) { show('final-result', FINAL_DELETE_ERRORS.confirm_mismatch); return; }
-  if (!confirm('purge 済みテナント「' + id + '」の専用シート（PURGED_）と複製2つを Drive のゴミ箱へ移します。\n\nゴミ箱へ移すだけで、約30日は Drive のゴミ箱から復元できます。よろしいですか？')) return;
+  if (!confirm('purge 済みテナント「' + id + '」の専用シート（PURGED_）と複製2つを Drive のゴミ箱へ移します。\n\nゴミ箱へ移すだけで、最大30日間は Drive のゴミ箱から復元できます。よろしいですか？')) return;
   busy($('final-btn'), true);
   try {
     const r = await callApi('final_delete_tenant', { tenant_id: id, confirm_tenant_id: confirmId });

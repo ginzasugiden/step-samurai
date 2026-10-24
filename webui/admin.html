@@ -58,7 +58,7 @@
 
     <section class="card">
       <h2>purge 済みテナントの最終削除</h2>
-      <p class="hint">purge 済み（マスターに存在しない）店舗の、PURGED_ に改名した専用シートと、purge 時に作った複製2つ（専用シートの複製・マスター行の複製）を <b>Drive のゴミ箱へ移します</b>。完全削除ではなく、約30日は Drive のゴミ箱から復元できます。名前が想定と違うファイルや取得できないファイルは触らず、スキップとして表示します。解約日から30日以内に実行してください（規約第8条）。</p>
+      <p class="hint">purge 済み（マスターに存在しない）店舗の、PURGED_ に改名した専用シートと、purge 時に作った複製2つ（専用シートの複製・マスター行の複製）を <b>Drive のゴミ箱へ移します</b>。完全削除ではなく、最大30日間は Drive のゴミ箱から復元できます。名前が想定と違うファイルや取得できないファイルは触らず、スキップとして表示します。purge と同じ日（解約日から23日目のリマインド時）に実行してください（期限は解約日から30日以内。規約第8条）。</p>
       <div class="form-grid">
         <label>tenant_id <input id="final-id" type="text" autocomplete="off" placeholder="purge 済みの店舗ID"></label>
         <label>確認のためもう一度 tenant_id <input id="final-confirm" type="text" autocomplete="off"></label>

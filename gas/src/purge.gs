@@ -130,11 +130,13 @@ function checkPurgeReminders_() {
         `disabled になった日: ${start}${unrecorded ? '（disabled日の記録なし（本日を起点に記録））' : ''}`,
         `削除期限: ${deadline}（disabled 日 + ${PURGE_DEADLINE_DAYS_} 日。規約第8条）`,
         '',
-        '管理画面から purge_tenant を実行してください（専用シート・複製・認証情報・トークンを削除します）。'
+        `管理画面で「完全削除（purge）」のあと「最終削除」を同日に実行してください（期限: ${deadline}）。`,
+        '・完全削除（purge）: 認証情報・トークン等を削除し、専用シートを PURGED_ に改名します（複製を作成）。',
+        '・最終削除: PURGED シートと複製2つを Drive のゴミ箱へ移します。'
       ].join('\n');
       if (!adminEmail) { Logger.log(`checkPurgeReminders_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return; }
       if (unrecorded) appendBillingEvent_(t.tenant_id, 'system', 'disabled_observed', 'disabled', 'disabled', `初回検知日=${today}`);
-      MailApp.sendEmail(adminEmail, `[step-samurai] 解約済みテナントの削除期限が近づいています（${t.tenant_id}）`, body);
+      MailApp.sendEmail(adminEmail, `[step-samurai] 解約済みテナントの削除期限が近づいています・完全削除（purge）と最終削除を同日に実行（${t.tenant_id}・期限 ${deadline}）`, body);
       appendBillingEvent_(t.tenant_id, 'system', 'purge_reminder_sent', '', '', `${today} start=${start} deadline=${deadline}`);
       done.push(t.tenant_id);
     } catch (e) { Logger.log(`checkPurgeReminders_ error [${t.tenant_id}]: ${e.message}`); }

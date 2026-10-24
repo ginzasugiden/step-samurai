@@ -59,3 +59,5 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - 日次 `checkExtStale_`: active で受信実績があり最終受信から3日超のテナントを ADMIN_EMAIL へ通知（1日1回）。
 - 解約: 23日目のリマインドで purge と、続けて管理画面「最終削除」（`final_delete_tenant`）で PURGED_ シートと複製をゴミ箱へ移す（tenant_id 再入力）。
 - 配布 zip: `node tools/build-extension.js`（`dist/` は git 管理外）。ストア申請文書は `docs/store/`。規約は v1.1（`TERMS_VERSION` は `gas/src/onboarding.gs` と `webui/onboard.js` を同時に更新）。
+- 疎通確認用テナント（`gas/src/exttest.gs`）: GAS エディタで `setupExtTestTenant()` を実行すると tenant_id=`exttest`（status=setup・dry_run=true・認証情報なし・billing は manual/active）を作り、レビュー取込トークンを実行ログに**1回だけ**出す（2回目は再表示せず「既に存在」。再発行は管理画面で失効→再発行）。
+- 撤去は `teardownExtTestTenant()`（引数なし・exttest 固定）。トークン失効→disabled→purge→最終削除を一度に行う。拡張機能の試験は exttest のトークンで行い、終わったら必ず撤去する。

@@ -11,7 +11,9 @@
  *
  * 削除するもの: tenant_secrets（RMS / SMTP 暗号文）、tenant_auth（パスワード・トークン・セッション）、invites、
  *   Script Properties の REVIEW_INGEST_KEY__<id> と ANALYTICS_BACKFILL_CURSOR__<id>、マスター tenants の行（最後）
- * 削除しないもの: 専用シート本体（名前を PURGED_ に変えるだけ。譲渡または削除は人が行う）、複製、billing_events、pipeline_log
+ * 削除しないもの（この purge では）: 専用シート本体（名前を PURGED_ に変えるだけ）、複製、billing_events、pipeline_log
+ *   専用シート本体と複製2つは、後続の最終削除 adminFinalDeleteTenant_（final_delete_tenant。管理者が実行）で Drive のゴミ箱へ移す（完全削除ではない。
+ *   ゴミ箱の中身は Drive の仕様により約30日後に完全削除される）。譲渡する場合は最終削除の前に人が行う。billing_events と pipeline_log は残る。
  * smtp_bridge の config.php（旧方式の SMTP 設定）は別サーバなので、必要なら人が消す。
  *
  * 途中で失敗した場合はマスター行を残したまま error を返すので、原因を直して同じ操作をやり直せる（各削除は冪等）。

@@ -13,7 +13,7 @@
 
 const INVITES_SHEET_ = 'invites';
 const INVITE_TTL_DAYS_ = 7;
-const TERMS_VERSION = '1.0';   // 利用規約・プライバシーポリシーの版（改定時にここと webui/onboard.js の TERMS_VERSION を同時に更新）
+const TERMS_VERSION = '1.1';   // 利用規約・プライバシーポリシーの版（改定時にここと webui/onboard.js の TERMS_VERSION を同時に更新）
 
 function getInvitesSheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('TENANT_MASTER_SHEET_ID');

@@ -55,34 +55,34 @@ const r0 = ctx.adminCreateInvite_({ tenant_id: TID, shop_name: '規約店', shop
 const tfBefore = JSON.stringify([master.rows.find(x => x[0] === 'tokyoflower'), tf.sheets.settings.rows, tf.sheets.orders.rows, ctx.readBillingRow_('tokyoflower')]);
 const evBefore = events().length;
 
-t('TERMS_VERSION は 1.0', () => assert.equal(vm.runInContext('TERMS_VERSION', ctx), '1.0'));
+t('TERMS_VERSION は 1.1', () => assert.equal(vm.runInContext('TERMS_VERSION', ctx), '1.1'));
 t('terms_version 無しは terms_not_agreed で拒否', () => { assert.equal(ctx.onboardSubmit_(base(invite)).error, 'terms_not_agreed'); });
-t("版違い('0.9') と空文字も拒否", () => { ['0.9', '', '1.0.1', null].forEach(v => assert.equal(ctx.onboardSubmit_(Object.assign(base(invite), { terms_version: v })).error, 'terms_not_agreed')); });
+t("版違い('0.9') と空文字も拒否", () => { ['0.9', '1.0', '', '1.1.1', null].forEach(v => assert.equal(ctx.onboardSubmit_(Object.assign(base(invite), { terms_version: v })).error, 'terms_not_agreed')); });
 t('拒否時は secret 保存なし・招待未消費・terms_agreed なし・パスワード/トークン未発行', () => {
   assert.equal(ctx.getTenantSecret_(TID, 'rms'), null); assert.equal(ctx.getTenantSecret_(TID, 'smtp'), null);
   assert.equal(ctx.verifyInvite_(invite, false), TID); assert.equal(termsEv(TID).length, 0);
   assert.equal(master.rows.find(x => x[0] === TID)[1], '規約店'.length ? master.rows.find(x => x[0] === TID)[1] : '');
   assert.equal(ctx.readBillingRow_(TID).trial_start, '', 'trial 未起算'); assert.equal(notified.length, 0); });
-t('無効な招待は terms より先に invalid_invite（招待検証が最初）', () => { assert.equal(ctx.onboardSubmit_(Object.assign(base('bogus'), { terms_version: '1.0' })).error, 'invalid_invite'); });
+t('無効な招待は terms より先に invalid_invite（招待検証が最初）', () => { assert.equal(ctx.onboardSubmit_(Object.assign(base('bogus'), { terms_version: '1.1' })).error, 'invalid_invite'); });
 let ok;
 t('同意ありなら成功し billing_events に terms_agreed（source=onboard, JST ISO8601）が1件記録される', () => {
-  ok = ctx.onboardSubmit_(Object.assign(base(invite), { terms_version: '1.0' })); assert.equal(ok.ok, true);
+  ok = ctx.onboardSubmit_(Object.assign(base(invite), { terms_version: '1.1' })); assert.equal(ok.ok, true);
   const ev = termsEv(TID); assert.equal(ev.length, 1); assert.equal(ev[0][3], 'onboard');
-  assert.match(ev[0][7], /^terms_version=1\.0;terms_agreed_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/);
+  assert.match(ev[0][7], /^terms_version=1\.1;terms_agreed_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/);
   assert.equal(ctx.verifyInvite_(invite, false), null, '招待は消費済み'); });
 t('記録失敗（billing_events 書込不可）でも登録自体は成功する', () => {
   const inv2 = ctx.adminCreateInvite_({ tenant_id: TID + 'b', shop_name: '規約店2', shop_email: 't2@example.jp' }).invite;
   const orig = ctx.appendBillingEvent_; ctx.appendBillingEvent_ = () => { throw new Error('boom'); };
-  try { const r = ctx.onboardSubmit_(Object.assign(base(inv2), { terms_version: '1.0' })); assert.equal(r.ok, true); } finally { ctx.appendBillingEvent_ = orig; } });
+  try { const r = ctx.onboardSubmit_(Object.assign(base(inv2), { terms_version: '1.1' })); assert.equal(r.ok, true); } finally { ctx.appendBillingEvent_ = orig; } });
 t('tokyoflower の行・settings・orders・billing・events は変わらない', () => {
   assert.equal(JSON.stringify([master.rows.find(x => x[0] === 'tokyoflower'), tf.sheets.settings.rows, tf.sheets.orders.rows, ctx.readBillingRow_('tokyoflower')]), tfBefore);
   assert.equal(events().filter(r => r[2] === 'tokyoflower' && r[4] === 'terms_agreed').length, 0); });
 t('adminListTenants_ は terms 情報を返し、未記録テナントは空', () => {
   const list = ctx.adminListTenants_(); const me = list.find(x => x.tenant_id === TID), tfRow = list.find(x => x.tenant_id === 'tokyoflower');
-  assert.equal(me.terms_version, '1.0'); assert.equal(me.terms_agreed_at, termsEv(TID)[0][7].split('terms_agreed_at=')[1]);
+  assert.equal(me.terms_version, '1.1'); assert.equal(me.terms_agreed_at, termsEv(TID)[0][7].split('terms_agreed_at=')[1]);
   assert.equal(tfRow.terms_version, ''); assert.equal(tfRow.terms_agreed_at, ''); });
 t('adminListTenants_ は最新の terms_agreed を採用する', () => {
-  ctx.appendBillingEvent_(TID, 'onboard', 'terms_agreed', '', '', 'terms_version=1.1;terms_agreed_at=2099-01-01T00:00:00+09:00');
-  const me = ctx.adminListTenants_().find(x => x.tenant_id === TID); assert.equal(me.terms_version, '1.1'); assert.equal(me.terms_agreed_at, '2099-01-01T00:00:00+09:00'); });
+  ctx.appendBillingEvent_(TID, 'onboard', 'terms_agreed', '', '', 'terms_version=1.2;terms_agreed_at=2099-01-01T00:00:00+09:00');
+  const me = ctx.adminListTenants_().find(x => x.tenant_id === TID); assert.equal(me.terms_version, '1.2'); assert.equal(me.terms_agreed_at, '2099-01-01T00:00:00+09:00'); });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

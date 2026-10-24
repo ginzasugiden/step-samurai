@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 店舗セルフ登録ページ。招待コード・入力値はメモリ上のみ。送信は HTTPS の GAS WebApp へ。
 const $ = id => document.getElementById(id);
-const TERMS_VERSION = '1.0';   // 利用規約の版（gas/src/onboarding.gs の TERMS_VERSION と一致させる）
+const TERMS_VERSION = '1.1';   // 利用規約の版（gas/src/onboarding.gs の TERMS_VERSION と一致させる）
 const state = { apiUrl: '', invite: '' };
 
 async function call(action, payload) {

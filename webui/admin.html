@@ -56,6 +56,17 @@
       <pre id="create-result" class="result-box" hidden></pre>
     </section>
 
+    <section class="card">
+      <h2>purge 済みテナントの最終削除</h2>
+      <p class="hint">purge 済み（マスターに存在しない）店舗の、PURGED_ に改名した専用シートと、purge 時に作った複製2つ（専用シートの複製・マスター行の複製）を <b>Drive のゴミ箱へ移します</b>。完全削除ではなく、約30日は Drive のゴミ箱から復元できます。名前が想定と違うファイルや取得できないファイルは触らず、スキップとして表示します。解約日から30日以内に実行してください（規約第8条）。</p>
+      <div class="form-grid">
+        <label>tenant_id <input id="final-id" type="text" autocomplete="off" placeholder="purge 済みの店舗ID"></label>
+        <label>確認のためもう一度 tenant_id <input id="final-confirm" type="text" autocomplete="off"></label>
+      </div>
+      <button id="final-btn" class="secondary">ゴミ箱へ移す…</button>
+      <pre id="final-result" class="result-box" hidden></pre>
+    </section>
+
     <section class="card" id="detail-card" hidden>
       <h2>テナント: <span id="detail-id"></span></h2>
       <nav class="tabs">
@@ -100,6 +111,10 @@
           <div><h3>遡及取得（13ヶ月）</h3><button id="backfill-btn">開始 / 再開</button> <button id="backfill-status-btn" class="secondary">状況</button> <button id="backfill-reset-btn" class="secondary">カーソル削除</button><pre id="backfill-result" class="result-box" hidden></pre></div>
           <div><h3>店舗ログイン（店舗ID＋パスワード）</h3><button id="pw-reset-btn">パスワードを再設定（自動生成）</button><pre id="pw-result" class="result-box" hidden></pre><p class="hint">店舗ID は tenant_id。生成したパスワードは一度しか表示されません。店舗は管理画面「認証情報」から自分で変更できます。</p></div>
           <div><h3>店舗トークン（自動化・運営者向け）</h3><button id="token-btn">新規発行</button> <button id="revoke-btn" class="secondary">全失効</button><pre id="token-result" class="result-box" hidden></pre><p class="hint">発行した平文は一度しか表示されません。店舗へ安全な手段で渡してください。</p></div>
+          <div><h3>レビュー取込トークン（拡張機能用）</h3>
+            <p id="ext-status" class="hint"></p>
+            <button id="ext-issue-btn">発行（再発行）</button> <button id="ext-revoke-btn" class="secondary" disabled>失効</button><pre id="ext-result" class="result-box" hidden></pre>
+            <p class="hint">店舗の Chrome 拡張機能がレビューを送るための専用トークンです（レビュー取込だけに使え、管理画面にはログインできません）。発行した平文は<b>一度しか表示されず、再表示はできません</b>。再発行すると旧トークンは直ちに無効になります。最終受信から3日を超えると運営宛にメールで通知されます。</p></div>
           <div><h3>状態変更</h3>
             <select id="status-select"><option value="setup">setup</option><option value="paused">paused</option><option value="active">active</option><option value="disabled">disabled</option></select>
             <button id="status-btn">変更</button><pre id="status-result" class="result-box" hidden></pre></div>

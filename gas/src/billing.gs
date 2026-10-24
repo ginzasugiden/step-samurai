@@ -453,6 +453,7 @@ function checkBillingDaily() {
   try { sendTrialDigest_(today, digest); } catch (e) { Logger.log(`checkBillingDaily digest error: ${e.message}`); }
   try { checkHourlyHealth_(); } catch (e) { Logger.log(`checkBillingDaily hourly health error: ${e.message}`); consoleError_(`checkHourlyHealth_ failed: ${e.message}`); }
   try { checkPurgeReminders_(); } catch (e) { Logger.log(`checkBillingDaily purge reminder error: ${e.message}`); consoleError_(`checkPurgeReminders_ failed: ${e.message}`); }
+  try { checkExtStale_(); } catch (e) { Logger.log(`checkBillingDaily ext stale error: ${e.message}`); consoleError_(`checkExtStale_ failed: ${e.message}`); }
   try { prunePipelineLog_(); } catch (e) { Logger.log(`checkBillingDaily prune error: ${e.message}`); consoleError_(`prunePipelineLog_ failed: ${e.message}`); }
   return flagged;
 }

@@ -148,13 +148,26 @@ function importReviewsFromCsv_(tenantId, csvText, preview) {
   for (let i = 1; i < data.length; i++) { const id = String(data[i][idIdx] || ''); if (id) rowByIdx[id] = i; }
 
   const cols = ['review_id', 'order_number', 'buyer_key', 'item_code', 'rating', 'posted_at', 'body'];
-  const toRow = rec => { const row = Array(hdr.length).fill(''); cols.forEach(c => { const i = hdr.indexOf(c); if (i >= 0) row[i] = rec[c]; }); return row; };
+  // 既存行の更新は既存行をベースにし、CSV が持つ7列だけを書く（ECOS / 拡張由来の追加列 review_type〜matched は保持する）。
+  // CSV 側が空の buyer_key / item_code / body は既存値を残す（CSV に列が無い場合に消さないため）。新規行は従来どおり。
+  const keepIfEmpty = ['buyer_key', 'item_code', 'body'];
+  const toRow = (rec, existingRow) => {
+    const row = existingRow ? existingRow.slice() : Array(hdr.length).fill('');
+    while (row.length < hdr.length) row.push('');
+    cols.forEach(c => {
+      const i = hdr.indexOf(c);
+      if (i < 0) return;
+      if (existingRow && keepIfEmpty.indexOf(c) >= 0 && rec[c] === '') return;
+      row[i] = rec[c];
+    });
+    return row;
+  };
 
   let updated = 0; const newRows = [];
   records.forEach(rec => {
     const i = rowByIdx[rec.review_id];
-    if (i !== undefined) { sheet.getRange(i + 1, 1, 1, hdr.length).setValues([toRow(rec)]); updated++; }
-    else newRows.push(toRow(rec));
+    if (i !== undefined) { sheet.getRange(i + 1, 1, 1, hdr.length).setValues([toRow(rec, data[i])]); updated++; }
+    else newRows.push(toRow(rec, null));
   });
   if (newRows.length) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, hdr.length).setValues(newRows);
 

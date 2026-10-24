@@ -128,14 +128,23 @@ async function selectTenant(id) {
   state.current = t; $('detail-id').textContent = `${t.tenant_id}（${t.shop_name}）`; $('detail-card').hidden = false;
   $('status-select').value = t.status;
   $('purge-btn').disabled = t.status !== 'disabled';   // disabled 以外は押せない（サーバ側でも拒否する）
+  renderExtStatus(t);
   if (switched) {
-    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result','purge-result'].forEach(i => { $(i).hidden = true; });
+    ['cred-result','backfill-result','token-result','status-result','bridge-result','misc-result','pw-result','bill-result','purge-result','ext-result'].forEach(i => { $(i).hidden = true; });
     document.querySelector('#probe-table tbody').innerHTML = '';
   }
   $('detail-terms').textContent = t.terms_version ? `規約同意：v${t.terms_version} / ${String(t.terms_agreed_at || '').replace('T', ' ').slice(0, 16)}` : '規約同意：記録なし';
   renderChecklist(t);
   try { const r = await callApi('get_tenant_settings', { tenant_id: id }); if (r.ok) renderSettings(r.settings); } catch (e) {}
   $('detail-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+// レビュー取込トークン（拡張機能用）の状態表示。平文・ハッシュはサーバから来ない（有無・発行日時・最終受信日時のみ）
+function renderExtStatus(t) {
+  $('ext-status').textContent = t.ext_token_active
+    ? '状態: 有効 / 発行: ' + (t.ext_token_issued_at || '-') + ' / 最終受信: ' + (t.ext_last_received_at || '未受信')
+    : '状態: 未発行';
+  $('ext-revoke-btn').disabled = !t.ext_token_active;
 }
 
 function renderChecklist(t) {
@@ -185,8 +194,9 @@ const op = (btnId, action, resultId, extra, confirmMsg) => $(btnId).addEventList
     const r = await callApi(action, Object.assign(tid(), extra ? extra() : {}));
     if (action === 'issue_tenant_token' && r.ok) showToken(resultId, r.token);
     else if (action === 'reset_password' && r.ok) showToken(resultId, r.password);
+    else if (action === 'issue_ext_token' && r.ok) showToken(resultId, r.token);
     else show(resultId, r.snippet ? r.note + '\n\n' + r.snippet : r);
-    if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp', 'set_billing'].includes(action)) await reloadTenants();
+    if (['set_tenant_status', 'issue_tenant_token', 'revoke_tenant_token', 'issue_ext_token', 'revoke_ext_token', 'backfill_start', 'backfill_reset', 'set_credentials', 'set_smtp', 'set_billing'].includes(action)) await reloadTenants();
   }
   catch (e) { show(resultId, '通信エラー: ' + e.message); } finally { busy($(btnId), false); }
 });
@@ -200,6 +210,27 @@ $('purge-btn').addEventListener('click', async () => {
   try { const r = await callApi('purge_tenant', { tenant_id: id, confirm_tenant_id: typed.trim() }); show('purge-result', r); if (r.ok) await reloadTenants(); }
   catch (e) { show('purge-result', '通信エラー: ' + e.message); } finally { busy($('purge-btn'), false); $('purge-btn').disabled = !state.current || state.current.status !== 'disabled'; }
 });
+// 最終削除: purge 済みテナントの PURGED シートと複製2つを Drive のゴミ箱へ移す（完全削除ではない）。店舗ID の再入力が必要
+const FINAL_DELETE_ERRORS = { tenant_id_required: '店舗IDを入力してください', confirm_mismatch: '確認用の店舗IDが一致しません', protected_tenant: 'この店舗は保護されているため実行できません',
+  tenant_not_purged: 'この店舗はまだ purge されていません（先に purge_tenant を実行してください）', purge_record_not_found: 'purge の実行記録が見つかりません', already_final_deleted: 'すでに最終削除を実行済みです',
+  busy: '他の処理が実行中です。しばらくして再試行してください', unauthorized: '管理者トークンが正しくありません' };
+const FINAL_DELETE_SKIP = { name_mismatch: 'ファイル名が想定と違うため触りませんでした', not_accessible: 'ファイルを取得できませんでした', already_trashed: 'すでにゴミ箱にあります', id_not_found: 'ファイルIDを特定できませんでした', trash_failed: 'ゴミ箱への移動に失敗しました' };
+const FINAL_DELETE_TARGET = { purged_sheet: '専用シート（PURGED_）', sheet_backup: '専用シートの複製', master_backup: 'マスター行の複製' };
+$('final-btn').addEventListener('click', async () => {
+  const id = $('final-id').value.trim(), confirmId = $('final-confirm').value.trim();
+  if (!id) { show('final-result', FINAL_DELETE_ERRORS.tenant_id_required); return; }
+  if (confirmId !== id) { show('final-result', FINAL_DELETE_ERRORS.confirm_mismatch); return; }
+  if (!confirm('purge 済みテナント「' + id + '」の専用シート（PURGED_）と複製2つを Drive のゴミ箱へ移します。\n\nゴミ箱へ移すだけで、約30日は Drive のゴミ箱から復元できます。よろしいですか？')) return;
+  busy($('final-btn'), true);
+  try {
+    const r = await callApi('final_delete_tenant', { tenant_id: id, confirm_tenant_id: confirmId });
+    if (!r.ok) { show('final-result', '実行できませんでした: ' + (FINAL_DELETE_ERRORS[r.error] || r.error)); return; }
+    const lines = ['ゴミ箱へ移したファイル数: ' + r.trashed + ' / 3'];
+    (r.skipped || []).forEach(s => lines.push('スキップ: ' + (FINAL_DELETE_TARGET[s.target] || s.target) + '（' + (FINAL_DELETE_SKIP[s.reason] || s.reason) + '）'));
+    if (r.trashed > 0) lines.push('約30日は Drive のゴミ箱から復元できます。');
+    show('final-result', lines.join('\n'));
+  } catch (e) { show('final-result', '通信エラー: ' + e.message); } finally { busy($('final-btn'), false); }
+});
 op('cred-btn', 'check_credentials', 'cred-result');
 op('pw-reset-btn', 'reset_password', 'pw-result', null, 'この店舗のログインパスワードを再設定します（既存のパスワードとセッションは無効になります）。');
 op('backfill-btn', 'backfill_start', 'backfill-result', null, '13ヶ月分の受注を取り込みます（約30分、2分ごとに自動継続）。よろしいですか？');
@@ -207,6 +238,8 @@ op('backfill-status-btn', 'backfill_status', 'backfill-result');
 op('backfill-reset-btn', 'backfill_reset', 'backfill-result', null, '遡及取得の進捗カーソルを削除します。次回は13ヶ月前からやり直しになります。');
 op('token-btn', 'issue_tenant_token', 'token-result', null, '新しい店舗トークンを発行します（既存のトークンはそのまま有効）。');
 op('revoke-btn', 'revoke_tenant_token', 'token-result', null, 'この店舗の有効トークンをすべて失効させます。店舗は再ログインできなくなります。');
+op('ext-issue-btn', 'issue_ext_token', 'ext-result', null, '拡張機能用のレビュー取込トークンを発行します。すでに発行済みの場合、旧トークンは直ちに無効になり、店舗の拡張機能は新しいトークンの再設定が必要になります。発行した平文は一度しか表示されません。よろしいですか？');
+op('ext-revoke-btn', 'revoke_ext_token', 'ext-result', null, 'この店舗の拡張機能用トークンを失効させます。店舗の拡張機能はレビューを送れなくなります（再発行すれば再開できます）。よろしいですか？');
 op('status-btn', 'set_tenant_status', 'status-result', () => ({ status: $('status-select').value }), 'テナントの状態を変更します。active にすると毎時パイプラインの対象になります。');
 op('bill-btn', 'set_billing', 'bill-result', () => ({ billing_status: $('bill-status').value, billing_provider: $('bill-provider').value, billing_note: $('bill-note').value.trim(),
   freee_invoiced: $('bill-freee').checked, freee_date: $('bill-freee-date').value, freee_invoice_no: $('bill-freee-no').value.trim() }), '課金情報を更新します。past_due / canceled にすると、この店舗の送信・クーポン発行が止まります。');

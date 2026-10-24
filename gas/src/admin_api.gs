@@ -22,6 +22,7 @@ const ADMIN_ACTIONS_ = [
   'backfill_start', 'backfill_status', 'backfill_reset',
   'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp', 'reset_password',
   'set_billing', 'ensure_billing_schema', 'purge_tenant',
+  'issue_ext_token', 'revoke_ext_token', 'final_delete_tenant',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -58,6 +59,9 @@ function handleAdminAction_(req) {
       case 'set_smtp':            return withTenant_(tenantId, () => updateSmtp_(tenantId, payload));
       case 'set_billing':         return withTenant_(tenantId, () => adminSetBilling_(tenantId, payload));
       case 'purge_tenant':        return jsonResponse_(adminPurgeTenant_(payload));   // purge.gs（disabled のみ・tenant_id 再入力・複製後に削除）
+      case 'final_delete_tenant': return jsonResponse_(adminFinalDeleteTenant_(payload)); // purge.gs（purge 済みの複製・PURGED シートをゴミ箱へ移すだけ）
+      case 'issue_ext_token':     return withTenant_(tenantId, () => ({ ok: true, tenant_id: tenantId, token: issueExtToken_(tenantId) })); // reviews_ext.gs（平文は一度だけ）
+      case 'revoke_ext_token':    return withTenant_(tenantId, () => ({ ok: true, revoked: revokeExtToken_(tenantId) }));
       case 'ensure_billing_schema': return jsonResponse_({ ok: true, result: ensureBillingSchema_() });
       case 'reset_password':      return withTenant_(tenantId, () => ({ ok: true, tenant_id: tenantId, password: setTenantPassword_(tenantId, String(payload.password || '') || null) }));
       default:                    return jsonResponse_({ ok: false, error: 'unknown_action' });
@@ -97,15 +101,18 @@ function latestTermsByTenant_() {
 
 function adminListTenants_() {
   const tenants   = listAllTenants_();
-  const authRows  = ensureAuthColumns_().getDataRange().getValues().slice(1);
+  const authAll   = ensureAuthColumns_().getDataRange().getValues();
+  const authRows  = authAll.slice(1);
   const pending   = listBackfillPendingTenants_();
   const terms     = latestTermsByTenant_();   // billing_events を1回だけ読む
+  const extTokens = extTokenSummaryByTenant_(authAll);   // 拡張用トークンの有無・発行日時・最終受信日時（平文・ハッシュは含めない）
   return tenants.map(t => {
     const out = {
       tenant_id: t.tenant_id, shop_name: t.shop_name, status: t.status,
       shop_email: t.shop_email, cc_email: t.cc_email, spreadsheet_id: t.spreadsheet_id,
       active_tokens: authRows.filter(r => String(r[0]) === t.tenant_id && r[3] === 'active' && String(r[4] || 'token') === 'token').length,
       has_password:  authRows.some(r => String(r[0]) === t.tenant_id && r[3] === 'active' && String(r[4] || '') === 'password'),
+      ext_token_active: !!extTokens[t.tenant_id], ext_token_issued_at: (extTokens[t.tenant_id] || {}).issued_at || '', ext_last_received_at: (extTokens[t.tenant_id] || {}).last_received_at || '',
       has_credentials: false, credentials_expiry: '',
       backfill_cursor: (pending.find(p => p.tenantId === t.tenant_id) || {}).cursor || null,
       settings: {},

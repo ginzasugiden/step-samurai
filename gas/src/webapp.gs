@@ -39,6 +39,7 @@ function doPost(e) {
     }
     if (action === 'fincode_webhook') return jsonResponse_(handleFincodeWebhook_(req.payload || {})); // lolipop/fincode_webhook.php 経由（BRIDGE_TOKEN 認証・未設定なら拒否）
     if (action === 'ingest_reviews') return jsonResponse_(handleIngestReviews_(req.payload || {})); // ECOS Webhook（専用キー認証。テナントトークン不要）
+    if (action === 'ext_ingest_reviews') return jsonResponse_(handleExtIngestReviews_(req.payload || {})); // 店舗配布用 Chrome 拡張（レビュー取込専用トークン。reviews_ext.gs。token は payload 内）
     if (action === 'onboard_check')  return jsonResponse_(onboardCheck_(req.payload || {}));   // 招待コードで認証（onboarding.gs）
     if (action === 'onboard_submit') return jsonResponse_(onboardSubmit_(req.payload || {}));
     if (ADMIN_ACTIONS_.includes(action)) {

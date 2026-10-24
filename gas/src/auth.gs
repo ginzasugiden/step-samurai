@@ -80,6 +80,7 @@ function verifyTenantToken_(token) {
     if (row[idx('status')] !== 'active') continue;
     const kind = kindIdx >= 0 ? String(row[kindIdx] || 'token') : 'token';
     if (kind === 'password') continue; // パスワードハッシュはトークンとして使えない
+    if (kind === 'ext_review') continue; // 拡張機能用のレビュー取込トークンは管理画面API（テナント用アクション）には使えない（reviews_ext.gs の ext_ingest_reviews 専用）
     if (kind === 'session' && expIdx >= 0 && row[expIdx] && String(row[expIdx]) < now) continue; // 期限切れ
     if (hash_equals_(String(row[idx('token_hash')]), hash)) {
       return row[idx('tenant_id')];
@@ -88,7 +89,7 @@ function verifyTenantToken_(token) {
   return null;
 }
 
-/** 管理者用：指定テナントの有効トークンを全て失効させる */
+/** 管理者用：指定テナントの有効トークンを全て失効させる（password と ext_review は対象外。ext_review は revokeExtToken_ で別に失効する） */
 function revokeTenantToken_(tenantId) {
   const sheet  = getTenantAuthSheet_();
   const data   = sheet.getDataRange().getValues();
@@ -98,7 +99,7 @@ function revokeTenantToken_(tenantId) {
 
   const kindIdx = idx('kind');
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idx('tenant_id')] === tenantId && data[i][idx('status')] === 'active' && (kindIdx < 0 || String(data[i][kindIdx] || 'token') !== 'password')) {
+    if (data[i][idx('tenant_id')] === tenantId && data[i][idx('status')] === 'active' && (kindIdx < 0 || (String(data[i][kindIdx] || 'token') !== 'password' && String(data[i][kindIdx] || 'token') !== 'ext_review'))) {
       sheet.getRange(i + 1, idx('status') + 1).setValue('revoked');
       revoked++;
     }
@@ -131,7 +132,7 @@ function rotateTokenTokyoflower() {
 // =========================================================
 
 const SESSION_TTL_HOURS_ = 12;
-const AUTH_HEADER_ = ['tenant_id', 'token_hash', 'issued_at', 'status', 'kind', 'expires_at', 'salt'];
+const AUTH_HEADER_ = ['tenant_id', 'token_hash', 'issued_at', 'status', 'kind', 'expires_at', 'salt', 'last_used_at'];
 
 /** tenant_auth のヘッダに kind/expires_at/salt が無ければ追加する（冪等） */
 function ensureAuthColumns_() {
@@ -227,6 +228,30 @@ function revokeSessions_(tenantId) {
     }
   }
   return n;
+}
+
+// ===== 拡張用レビュー取込トークン（kind='ext_review'。発行・失効・受信処理は reviews_ext.gs）の一覧表示用 =====
+
+/** 日時セル（文字列または Sheets が変換した Date）を 'yyyy-MM-dd HH:mm:ss' の文字列に */
+function extDateTimeStr_(v) {
+  if (!v) return '';
+  return v instanceof Date ? Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss') : String(v);
+}
+
+/** list_tenants 用: { tenant_id: { active, issued_at, last_received_at } }（トークンの平文・ハッシュは含めない） */
+function extTokenSummaryByTenant_(authData) {
+  const out = {};
+  const header = (authData[0] || []).map(String);
+  const idx = c => header.indexOf(c);
+  if (idx('kind') < 0) return out;
+  authData.slice(1).forEach(r => {
+    if (String(r[idx('kind')]) !== 'ext_review' || r[idx('status')] !== 'active') return;
+    out[String(r[idx('tenant_id')])] = {
+      active: true, issued_at: extDateTimeStr_(r[idx('issued_at')]),
+      last_received_at: idx('last_used_at') >= 0 ? extDateTimeStr_(r[idx('last_used_at')]) : '',
+    };
+  });
+  return out;
 }
 
 /** 期限切れセッション行を物理削除（シート肥大化防止。下から消す） */

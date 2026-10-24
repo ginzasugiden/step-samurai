@@ -139,3 +139,69 @@ function checkPurgeReminders_() {
   });
   return done;
 }
+
+// ===== 最終削除（purge 済みテナントの PURGED シートと複製2つをゴミ箱へ移す。管理者のみ・ADMIN_ACTIONS_ の final_delete_tenant） =====
+//
+// 条件（すべて満たさないと何もしない）:
+//  - tenant_id と confirm_tenant_id が一致 / LEGACY_GLOBAL_FALLBACK_TENANT_ は拒否 / マスター tenants にもう存在しない（purge 済み）
+//  - billing_events に purge_tenant がある / 既にそれより後に final_delete があれば拒否（二重実行）
+// 対象: 最新の purge_started の note（`backup sheet=<id> master=<id>`）から複製2つ、PURGED シート本体は master 複製の tenants タブの spreadsheet_id から。
+// 各ファイルは名前が想定の形式（PURGED_<id>_<日時> / purge_backup_<id>_<日時> / purge_backup_master_<id>_<日時>）のときだけ setTrashed(true)。
+// 名前が違う・取得できないファイルは触らず skipped で返す。ゴミ箱へ移すだけで完全削除はしない（Drive のゴミ箱から約30日は復元できる）。
+function adminFinalDeleteTenant_(p) {
+  const tenantId = String(p.tenant_id || '').trim();
+  const confirmId = String(p.confirm_tenant_id || '').trim();
+  if (!tenantId) return { ok: false, error: 'tenant_id_required' };
+  if (confirmId !== tenantId) return { ok: false, error: 'confirm_mismatch' };
+  if (tenantId === LEGACY_GLOBAL_FALLBACK_TENANT_) return { ok: false, error: 'protected_tenant' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, error: 'busy' };
+  try {
+    if (listAllTenants_().some(x => x.tenant_id === tenantId)) return { ok: false, error: 'tenant_not_purged' };
+    const ev = getBillingEventsSheet_().getDataRange().getValues().slice(1).filter(r => String(r[2]) === tenantId);
+    let lastPurge = -1, lastFinal = -1, lastStarted = -1;
+    ev.forEach((r, i) => {
+      if (r[4] === 'purge_tenant') lastPurge = i;
+      if (r[4] === 'final_delete') lastFinal = i;
+      if (r[4] === 'purge_started') lastStarted = i;
+    });
+    if (lastPurge < 0) return { ok: false, error: 'purge_record_not_found' };
+    if (lastFinal > lastPurge) return { ok: false, error: 'already_final_deleted' };
+    const m = lastStarted >= 0 ? /sheet=(\S+)\s+master=(\S+)/.exec(String(ev[lastStarted][7])) : null;
+    if (!m) return { ok: false, error: 'purge_record_not_found' };
+    const sheetBackupId = m[1], masterBackupId = m[2];
+
+    const targets = [
+      { label: 'sheet_backup',  id: sheetBackupId,  re: new RegExp(`^purge_backup_${tenantId}_[0-9]{8}-[0-9]{6}$`) },
+      { label: 'master_backup', id: masterBackupId, re: new RegExp(`^purge_backup_master_${tenantId}_[0-9]{8}-[0-9]{6}$`) },
+    ];
+    const skipped = [];
+    // PURGED シート本体の ID は master 複製の tenants タブから読む
+    let purgedId = '';
+    try {
+      const tab = SpreadsheetApp.openById(masterBackupId).getSheetByName('tenants').getDataRange().getValues();
+      const idI = tab[0].map(String).indexOf('tenant_id'), ssI = tab[0].map(String).indexOf('spreadsheet_id');
+      const row = tab.slice(1).find(r => String(r[idI]) === tenantId);
+      purgedId = row ? String(row[ssI] || '') : '';
+    } catch (e) { purgedId = ''; }
+    if (purgedId) targets.unshift({ label: 'purged_sheet', id: purgedId, re: new RegExp(`^PURGED_${tenantId}_[0-9]{8}-[0-9]{6}$`) });
+    else skipped.push({ target: 'purged_sheet', reason: 'id_not_found' });
+
+    let trashed = 0; const trashedIds = [];
+    targets.forEach(tg => {
+      let file;
+      try { file = DriveApp.getFileById(tg.id); } catch (e) { skipped.push({ target: tg.label, reason: 'not_accessible' }); return; }
+      try {
+        if (!tg.re.test(String(file.getName()))) { skipped.push({ target: tg.label, reason: 'name_mismatch' }); return; }
+        if (file.isTrashed()) { skipped.push({ target: tg.label, reason: 'already_trashed' }); return; }
+        file.setTrashed(true);
+        trashed++; trashedIds.push(tg.id);
+      } catch (e) { skipped.push({ target: tg.label, reason: 'trash_failed' }); }
+    });
+
+    if (trashed > 0) appendBillingEvent_(tenantId, 'manual', 'final_delete', 'purged', 'final_deleted', `trashed=${trashed} skipped=${skipped.length} ids=${trashedIds.join(',')}`);
+    Logger.log(`finalDeleteTenant [${tenantId}]: trashed=${trashed} skipped=${JSON.stringify(skipped)}`);
+    return { ok: true, tenant_id: tenantId, trashed: trashed, skipped: skipped };
+  } finally { lock.releaseLock(); }
+}

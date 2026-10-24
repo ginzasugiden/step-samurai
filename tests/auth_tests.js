@@ -32,7 +32,7 @@ let pass = 0; const t = (n, f) => { try { f(); pass++; console.log('  ok  ' + n)
 let legacyToken;
 t('旧形式トークンは kind 列追加後も有効', () => {
   legacyToken = 'legacy-token-xyz'; auth.appendRow(['tokyoflower', ctx.hashToken_(legacyToken), '2026-01-01', 'active']);
-  ctx.ensureAuthColumns_(); assert.deepEqual(auth.rows[0], ['tenant_id','token_hash','issued_at','status','kind','expires_at','salt']);
+  ctx.ensureAuthColumns_(); assert.deepEqual(auth.rows[0], ['tenant_id','token_hash','issued_at','status','kind','expires_at','salt','last_used_at']);
   assert.equal(ctx.verifyTenantToken_(legacyToken), 'tokyoflower'); });
 let pw;
 t('パスワード設定: 平文・salt無しハッシュはシートに無い', () => { pw = ctx.setTenantPassword_('tokyoflower'); assert.equal(pw.length, 12); const j = JSON.stringify(auth.rows); assert.ok(!j.includes(pw)); assert.ok(!j.includes(ctx.hashToken_(pw))); assert.ok(ctx.hasTenantPassword_('tokyoflower')); });

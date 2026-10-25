@@ -155,6 +155,7 @@ function renderChecklist(t) {
     ['settings.go_live_date を設定', !!t.settings.go_live_date, '「設定」タブ'],
     ['遡及取得（13ヶ月）を開始し完了', t.backfill_cursor ? false : null, '「操作」→ 遡及取得'],
     ['店舗トークンを発行し店舗へ渡す（analytics.html / index.html で確認してもらう）', t.active_tokens > 0, '「操作」→ 店舗トークン'],
+    ['拡張用トークンを発行し、拡張機能の案内を送る', !!t.ext_token_active, '「操作」→ レビュー取込トークン'],
     ['テスト送信（index.html のテスト送信、宛先は店舗メール固定）で文面確認', null, '店舗側'],
     ['dry_run を false にし、状態を active に変更', t.status === 'active', '「設定」→「操作」'],
   ];
@@ -215,6 +216,8 @@ const FINAL_DELETE_ERRORS = { tenant_id_required: '店舗IDを入力してくだ
   tenant_not_purged: 'この店舗はまだ purge されていません（先に purge_tenant を実行してください）', purge_record_not_found: 'purge の実行記録が見つかりません', already_final_deleted: 'すでに最終削除を実行済みです',
   busy: '他の処理が実行中です。しばらくして再試行してください', unauthorized: '管理者トークンが正しくありません' };
 const FINAL_DELETE_SKIP = { name_mismatch: 'ファイル名が想定と違うため触りませんでした', not_accessible: 'ファイルを取得できませんでした', already_trashed: 'すでにゴミ箱にあります', id_not_found: 'ファイルIDを特定できませんでした', trash_failed: 'ゴミ箱への移動に失敗しました' };
+// reason は 'trash_failed: <例外メッセージ>' の形もある（原因が分かるよう例外文を添える）
+const finalDeleteSkipText = r => { r = String(r || ''); const i = r.indexOf(': '); const base = i > 0 ? r.slice(0, i) : r; return (FINAL_DELETE_SKIP[base] || base) + (i > 0 ? ' [' + r.slice(i + 2) + ']' : ''); };
 const FINAL_DELETE_TARGET = { purged_sheet: '専用シート（PURGED_）', sheet_backup: '専用シートの複製', master_backup: 'マスター行の複製' };
 $('final-btn').addEventListener('click', async () => {
   const id = $('final-id').value.trim(), confirmId = $('final-confirm').value.trim();
@@ -226,7 +229,7 @@ $('final-btn').addEventListener('click', async () => {
     const r = await callApi('final_delete_tenant', { tenant_id: id, confirm_tenant_id: confirmId });
     if (!r.ok) { show('final-result', '実行できませんでした: ' + (FINAL_DELETE_ERRORS[r.error] || r.error)); return; }
     const lines = ['ゴミ箱へ移したファイル数: ' + r.trashed + ' / 3'];
-    (r.skipped || []).forEach(s => lines.push('スキップ: ' + (FINAL_DELETE_TARGET[s.target] || s.target) + '（' + (FINAL_DELETE_SKIP[s.reason] || s.reason) + '）'));
+    (r.skipped || []).forEach(s => lines.push('スキップ: ' + (FINAL_DELETE_TARGET[s.target] || s.target) + '（' + finalDeleteSkipText(s.reason) + '）'));
     if (r.trashed > 0) lines.push('約30日は Drive のゴミ箱から復元できます。');
     show('final-result', lines.join('\n'));
   } catch (e) { show('final-result', '通信エラー: ' + e.message); } finally { busy($('final-btn'), false); }

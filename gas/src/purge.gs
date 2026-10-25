@@ -201,7 +201,7 @@ function adminFinalDeleteTenant_(p) {
         if (file.isTrashed()) { skipped.push({ target: tg.label, reason: 'already_trashed' }); return; }
         file.setTrashed(true);
         trashed++; trashedIds.push(tg.id);
-      } catch (e) { skipped.push({ target: tg.label, reason: 'trash_failed' }); }
+      } catch (e) { skipped.push({ target: tg.label, reason: 'trash_failed: ' + String((e && e.message) || e).replace(/\s+/g, ' ').substring(0, 100) }); }
     });
 
     if (trashed > 0) appendBillingEvent_(tenantId, 'manual', 'final_delete', 'purged', 'final_deleted', `trashed=${trashed} skipped=${skipped.length} ids=${trashedIds.join(',')}`);

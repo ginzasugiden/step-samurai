@@ -36,10 +36,10 @@ let lockOk = true, lockHeld = false;
 const LockService = { getScriptLock: () => ({ tryLock: () => { if (!lockOk) return false; lockHeld = true; return true; }, releaseLock: () => { lockHeld = false; } }) };
 // DriveApp モック: 名前は SS の name。setTrashed の呼び出しを記録する（完全削除 API は存在しない）
 const trashLog = []; const trashed = {};
-let brokenFile = null;
+let brokenFile = null, trashError = null;
 const DriveApp = { getFileById: id => {
   if (id === brokenFile || !books[id]) throw new Error('not accessible');
-  return { getName: () => books[id].name, isTrashed: () => !!trashed[id], setTrashed: v => { trashed[id] = v; trashLog.push(id + ':' + v); } }; } };
+  return { getName: () => books[id].name, isTrashed: () => !!trashed[id], setTrashed: v => { if (trashError) throw new Error(trashError); trashed[id] = v; trashLog.push(id + ':' + v); } }; } };
 const ctx = { DriveApp, PropertiesService, Utilities, Logger: { log() {} }, console, LockService, notifyAdmin_: () => {}, isDryRun_: () => false, RMS_BASE: 'x', formatRmsDate_: () => '',
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
   UrlFetchApp: { fetch: () => ({ getResponseCode: () => 200, getContentText: () => '{}' }) },
@@ -124,5 +124,14 @@ t('他のテナント（tokyoflower）・未 purge の店には一切触れな�
   const touched = trashLog.map(x => x.split(':')[0]); ['SS_TF', mrow('liveshop')[2]].forEach(id => assert.ok(!touched.includes(id))); });
 t('管理 API 経由で実行できる（zshop）', () => {
   const r = ctx.handleAdminAction_({ token: 'adm', action: 'final_delete_tenant', payload: { tenant_id: 'zshop', confirm_tenant_id: 'zshop' } }); assert.equal(r.ok, true); assert.equal(r.trashed, 3); });
+
+console.log('ゴミ箱移動の失敗理由（原因特定用に例外メッセージを reason に含める）');
+t("setTrashed が例外を投げたら reason='trash_failed: <メッセージ>' になり、何も移さず final_delete を記録しない", () => {
+  purgeIt('vshop'); const n0 = trashLog.length; trashError = 'Exception: You do not have permission to call DriveApp.setTrashed.\nRequired: https://www.googleapis.com/auth/drive';
+  const r = fd('vshop'); trashError = null;
+  assert.equal(r.ok, true); assert.equal(r.trashed, 0); assert.equal(r.skipped.length, 3); assert.equal(trashLog.length, n0);
+  r.skipped.forEach(s => { assert.ok(s.reason.startsWith('trash_failed: ')); assert.ok(s.reason.includes('do not have permission')); assert.ok(!s.reason.includes('\n')); assert.ok(s.reason.length <= 14 + 100); });
+  assert.equal(events('vshop').includes('final_delete'), false); });
+t('失敗後に直ればやり直せ、3つ移る', () => { const r = fd('vshop'); assert.equal(r.trashed, 3); assert.deepEqual(r.skipped, []); });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

@@ -61,3 +61,7 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - 配布 zip: `node tools/build-extension.js`（`dist/` は git 管理外）。ストア申請文書は `docs/store/`。規約は v1.1（`TERMS_VERSION` は `gas/src/onboarding.gs` と `webui/onboard.js` を同時に更新）。
 - 疎通確認用テナント（`gas/src/exttest.gs`）: GAS エディタで `setupExtTestTenant()` を実行すると tenant_id=`exttest`（status=setup・dry_run=true・認証情報なし・billing は manual/active）を作り、レビュー取込トークンを実行ログに**1回だけ**出す（2回目は再表示せず「既に存在」。再発行は管理画面で失効→再発行）。
 - 撤去は `teardownExtTestTenant()`（引数なし・exttest 固定）。トークン失効→disabled→purge→最終削除を一度に行う。拡張機能の試験は exttest のトークンで行い、終わったら必ず撤去する。
+
+### Drive スコープ（2026-10-25〜）
+- 最終削除（`purge.gs` の `setTrashed`）が権限不足で失敗していたため、`appsscript.json` に `oauthScopes` を明示し `drive` を追加（spreadsheets / script.external_request / script.send_mail / script.scriptapp も併記。明示すると自動検出が無効になるため、使用サービスを増やしたら必ず追記する。回帰テスト: `tests/admin_ui_tests.js`）。
+- スコープ追加のため GAS エディタで ginzasugiden による再承認（権限を確認→許可）が必要だった。承認前は毎時トリガー（:42）が失敗しうる。デプロイは既存ID @21。

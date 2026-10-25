@@ -35,10 +35,21 @@ t('固定値と「trash_failed: メッセージ」の両方を読める', () => 
   assert.equal(f('unknown_x'), 'unknown_x'); });
 
 console.log('appsscript.json: スコープ回帰');
-t('webapp セクションを保持し、oauthScopes を明示するなら Drive 全体スコープ(drive)と spreadsheets を含む', () => {
+t('webapp/executeAs/access/timeZone/runtimeVersion/exceptionLogging を保持', () => {
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'gas', 'src', 'appsscript.json'), 'utf8'));
   assert.ok(m.webapp && m.webapp.executeAs === 'USER_DEPLOYING' && m.webapp.access === 'ANYONE_ANONYMOUS');
-  if (m.oauthScopes) { // setTrashed/getFileById/copy には drive.file や drive.readonly では足りない
-    ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'].forEach(sc => assert.ok(m.oauthScopes.includes(sc), '不足: ' + sc)); } });
+  assert.equal(m.timeZone, 'Asia/Tokyo'); assert.equal(m.runtimeVersion, 'V8'); assert.equal(m.exceptionLogging, 'STACKDRIVER'); });
+t('oauthScopes を明示する場合、drive を含み、gas/src の使用サービスに対応する必須スコープがすべて含まれる（明示すると自動検出が無効になるため）', () => {
+  const dir = path.join(__dirname, '..', 'gas', 'src');
+  const m = JSON.parse(fs.readFileSync(path.join(dir, 'appsscript.json'), 'utf8'));
+  if (!m.oauthScopes) return; // 明示しない（自動検出）なら対象外
+  const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const G = 'https://www.googleapis.com/auth/';
+  const need = [G + 'drive']; // purge の setTrashed / getFileById に drive 全体が必要
+  const map = [[/SpreadsheetApp/, 'spreadsheets'], [/DriveApp/, 'drive'], [/UrlFetchApp/, 'script.external_request'],
+    [/MailApp/, 'script.send_mail'], [/GmailApp/, 'gmail.send'], [/ScriptApp\.(newTrigger|getProjectTriggers|deleteTrigger)/, 'script.scriptapp'],
+    [/Session\.get(Active|Effective)User/, 'userinfo.email'], [/CalendarApp/, 'calendar'], [/DocumentApp/, 'documents'], [/getOAuthToken/, 'script.external_request']];
+  map.forEach(([re, sc]) => { if (re.test(src)) need.push(G + sc); });
+  need.forEach(sc => assert.ok(m.oauthScopes.includes(sc), '不足: ' + sc)); });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

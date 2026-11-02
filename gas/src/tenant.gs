@@ -336,3 +336,12 @@ function checkLicenseExpiry() {
   });
   return res;
 }
+
+/**
+ * 外部由来の文字列をシートへ書く前に通す。先頭が = + - @（と tab / CR）だと数式として評価されうるため、先頭に ' を付けて文字列として保存する。
+ * 文字列以外（数値など）はそのまま返す。レビュー本文・商品名など店舗外の人が書ける項目に使う。
+ */
+function sheetSafeText_(v) {
+  if (typeof v !== 'string') return v;
+  return /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
+}

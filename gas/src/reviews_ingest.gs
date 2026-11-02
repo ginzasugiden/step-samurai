@@ -65,10 +65,10 @@ function normalizeIngestReviewRow_(raw) {
     order_number:    orderNumber,
     rating:          isNaN(ratingNum) ? 0 : ratingNum,
     posted_at:       postedAt,
-    body:            bodyText.substring(0, 5000),
-    review_type:     reviewType,
-    product_title:   String(raw.product_title || ''),
-    rakuten_item_id: String(raw.rakuten_item_id || ''),
+    body:            sheetSafeText_(bodyText.substring(0, 5000)),
+    review_type:     sheetSafeText_(reviewType),
+    product_title:   sheetSafeText_(String(raw.product_title || '')),
+    rakuten_item_id: sheetSafeText_(String(raw.rakuten_item_id || '')),
     source:          'ecos_webhook',
     deleted:         !!raw.deleted, // 列ではなく判定用フラグ。deleted_at は呼び出し側で now/'' に変換する
   };

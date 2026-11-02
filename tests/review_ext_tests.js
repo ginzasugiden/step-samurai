@@ -33,6 +33,7 @@ class SS { constructor(sheets) { this.sheets = sheets; } getSheetByName(n) { ret
 let lockOk = true;
 const LockService = { getScriptLock: () => ({ tryLock: () => lockOk, releaseLock: () => {} }) };
 const mails = [];
+const cacheStore = {};
 const MailApp = { sendEmail: (to, subject, body) => { mails.push({ to, subject, body }); } };
 
 const MASTER_HEADER = ['tenant_id', 'shop_name', 'spreadsheet_id', 'status', 'shop_email', 'cc_email', 'plan', 'billing_provider', 'billing_status', 'trial_start', 'trial_end', 'fincode_customer_id', 'fincode_subscription_id', 'billing_updated_at', 'billing_note'];
@@ -60,7 +61,7 @@ const mkBook = (settingRows = []) => new SS({
 const SpreadsheetApp = { openById: id => { if (!books[id]) throw new Error('no book ' + id); return books[id]; } };
 
 const ctx = { PropertiesService, Utilities, Logger, SpreadsheetApp, LockService, MailApp, console, notifyAdmin_: () => {}, isDryRun_: () => false, RMS_BASE: 'x', formatRmsDate_: () => '',
-  CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
+  CacheService: { getScriptCache: () => ({ get: k => (cacheStore[k] === undefined ? null : cacheStore[k]), put: (k, v) => { if (k.indexOf('ext_auth_fail') === 0) cacheStore[k] = v; }, remove: k => { delete cacheStore[k]; } }) },   // 無効トークン制限のキーだけ保持（他のキャッシュは従来どおり効かせない）
   Date: class extends Date { constructor(...a) { super(...(a.length ? a : [fakeNow.getTime()])); } static now() { return fakeNow.getTime(); } } };
 vm.createContext(ctx);
 ['crypto_store.gs', 'auth.gs', 'tenant.gs', 'config.gs', 'billing.gs', 'onboarding.gs', 'admin_api.gs', 'purge.gs', 'analytics_backfill.gs', 'mailer.gs', 'reviews_import.gs', 'reviews_ingest.gs', 'reviews_ext.gs', 'review_thanks.gs', 'webapp.gs']
@@ -73,7 +74,7 @@ const authSheet = () => books.MASTER.sheets.tenant_auth;
 const events = id => books.MASTER.sheets.billing_events ? books.MASTER.sheets.billing_events.rows.slice(1).filter(r => r[2] === id).map(r => r[4]) : [];
 const revSheet = id => books['SS_' + { tokyoflower: 'TF', shopa: 'A', shopb: 'B', shopc: 'C', shopd: 'D', shope: 'E', shopf: 'F' }[id]].sheets.reviews;
 const setSetting = (bookId, key, value) => { const s = books[bookId].sheets.settings; const r = s.rows.find(x => x[0] === key); if (r) r[1] = value; else s.rows.push([key, value, '', 'FALSE']); };
-const URL = n => `https://review.example.jp/item/1/shop_${n}/`;
+const URL = n => `https://review.rakuten.co.jp/item/1/shop_${n}/`;
 const ORD = n => `111111-20260901-${String(n).padStart(10, '0')}`;
 const good = (n, o = {}) => Object.assign({ review_id: URL(n), order_number: ORD(n), review_type: '商品レビュー', rating: 5, posted_at: '2026/9/1 9:05:03', title: 'SECRET-TITLE', body: 'SECRET-BODY', product_title: 'SECRET-PRODUCT', flag: 1, rakuten_item_id: 'X1' }, o);
 const call = (token, reviews, extra = {}) => ctx.handleExtIngestReviews_(Object.assign({ token, reviews }, extra));

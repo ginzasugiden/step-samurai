@@ -60,7 +60,7 @@ const TF0 = tfSnap();
 const allCells = () => JSON.stringify(Object.values(books).map(b => Object.values(b.sheets).map(s => s.rows)));
 const run = () => { logs.length = 0; return ctx.setupExtTestTenant(); };
 const tokensInLogs = () => logs.join('\n').match(/sse_[0-9a-f]{64}/g);
-const payload = (token, dry, id = 1) => ({ token, dry_run: dry, reviews: [{ review_id: `https://review.example.jp/r/${id}`, order_number: '123456-20261001-0000000001', rating: 5, posted_at: '2026-10-20 10:00:00', review_type: '商品レビュー' }] });
+const payload = (token, dry, id = 1) => ({ token, dry_run: dry, reviews: [{ review_id: `https://review.rakuten.co.jp/r/${id}`, order_number: '123456-20261001-0000000001', rating: 5, posted_at: '2026-10-20 10:00:00', review_type: '商品レビュー' }] });
 
 console.log('setupExtTestTenant: 作成');
 let TOKEN, EXT_SS;
@@ -115,7 +115,7 @@ t('dry_run: ok・would_insert=1・シートは変わらない・last_used_at も
   assert.equal(JSON.stringify(rv.rows), before); assert.equal(JSON.stringify(authRows('exttest')), lu); });
 t('実書き込み: reviews に1行（source=chrome_ext）・last_used_at 記録。テナント設定 dry_run=true のままで受け付ける', () => {
   const r = ctx.handleExtIngestReviews_(payload(TOKEN, false, 1)); assert.equal(r.ok, true); assert.equal(r.dry_run, false); assert.equal(r.inserted, 1);
-  const rv = books[EXT_SS].sheets.reviews.rows; const h = rv[0]; const row = rv.find(x => x[h.indexOf('review_id')] === 'https://review.example.jp/r/1');
+  const rv = books[EXT_SS].sheets.reviews.rows; const h = rv[0]; const row = rv.find(x => x[h.indexOf('review_id')] === 'https://review.rakuten.co.jp/r/1');
   assert.ok(row); assert.equal(row[h.indexOf('source')], 'chrome_ext'); assert.equal(String(row[h.indexOf('order_number')]), '123456-20261001-0000000001');
   const ar = authRows('exttest').find(x => x[3] === 'active' && x[4] === 'ext_review'); assert.ok(ar[books.MASTER.sheets.tenant_auth.rows[0].indexOf('last_used_at')]);
   assert.equal(ctx.getTenantSettingValue_('exttest', 'dry_run'), 'true'); });

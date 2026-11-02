@@ -16,6 +16,10 @@
  *  - 既存行の更新で書くのは order_number / rating / posted_at / review_type / updated_at のみ。新規行は source='chrome_ext'、body・product_title は空。
  *  - 書き込みは ScriptLock で直列化。ログには tenant_id と件数のみ（トークン・URL・注文番号は出さない）。
  *  - dry_run は検証と件数だけ（シート・認証シートへ一切書かない）。
+ *  - review_id は https://review.rakuten.co.jp/ 配下の URL のみ受け付ける（それ以外は invalid）。
+ *  - 無効トークン（不明・失効・形式不正）は CacheService で数え、EXT_FAIL_LIMIT_ 回/EXT_FAIL_WINDOW_SEC_ 秒を超えたら
+ *    一時的に 'busy' で拒否する（トークン照合・シート参照より前）。日別の件数は Script Properties に積み、日次 checkExtAuthFailures_ で
+ *    ADMIN_EMAIL へ件数だけ通知する（トークン・URL・本文は出さない）。
  */
 
 const EXT_TOKEN_KIND_ = 'ext_review';
@@ -24,6 +28,13 @@ const EXT_MAX_BYTES_ = 2 * 1024 * 1024;
 const EXT_STALE_DAYS_ = 3;
 const EXT_STALE_EVENT_ = 'ext_stale_notified';
 const EXT_INITIAL_FROM_DAYS_ = 30;
+const EXT_FAIL_LIMIT_ = 30;
+const EXT_FAIL_WINDOW_SEC_ = 600;
+const EXT_FAIL_COUNT_KEY_ = 'ext_auth_fail_count';
+const EXT_FAIL_BLOCK_KEY_ = 'ext_auth_fail_block';
+const EXT_FAIL_PROP_PREFIX_ = 'EXT_AUTHFAIL__';
+const EXT_TOKEN_RE_ = /^sse_[A-Za-z0-9]{16,200}$/;
+const EXT_REVIEW_ID_RE_ = /^https:\/\/review\.rakuten\.co\.jp\/[^\s]*$/;
 
 const EXT_MESSAGES_ = {
   unauthorized:       'トークンが正しくありません。',
@@ -86,7 +97,7 @@ function revokeExtToken_(tenantId) {
  * 失効行にハッシュが一致すれば revoked、どの ext_review にも一致しなければ unknown。
  */
 function resolveExtToken_(token) {
-  if (typeof token !== 'string' || !token || token.length > 200) return { status: 'unknown' };
+  if (typeof token !== 'string' || !EXT_TOKEN_RE_.test(token)) return { status: 'unknown' };   // 形式不正は認証シートを開く前に弾く
   const hash   = hashToken_(token);
   const data   = getTenantAuthSheet_().getDataRange().getValues();
   const header = data[0].map(String);
@@ -130,7 +141,7 @@ function validateExtRow_(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { reason: 'not_object' };
 
   const reviewId = typeof raw.review_id === 'string' ? raw.review_id.trim() : '';
-  if (!/^https?:\/\//i.test(reviewId) || reviewId.length > 500) return { reason: 'review_id' };
+  if (!EXT_REVIEW_ID_RE_.test(reviewId) || reviewId.length > 500) return { reason: 'review_id' };
 
   const orderNumber = typeof raw.order_number === 'string' ? raw.order_number.trim() : '';
   if (!/^[0-9][0-9\-]*$/.test(orderNumber) || orderNumber.length > 64) return { reason: 'order_number' };
@@ -155,6 +166,32 @@ function validateExtRow_(raw) {
   return { rec: { review_id: reviewId, order_number: orderNumber, rating: rating, posted_at: postedAt, review_type: reviewType } };
 }
 
+// ===== 無効トークンの制限と記録 =====
+
+/** 直近で無効トークンが閾値を超えていれば true（キャッシュ障害時は false = 認証自体は常に行う） */
+function isExtAuthThrottled_() {
+  try { return !!CacheService.getScriptCache().get(EXT_FAIL_BLOCK_KEY_); } catch (e) { return false; }
+}
+
+/** 無効トークン1回を記録する。閾値到達で一時拒否フラグを立て、日別件数（Script Properties）を加算する。値は何も残さない */
+function recordExtAuthFailure_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = (Number(cache.get(EXT_FAIL_COUNT_KEY_)) || 0) + 1;
+    cache.put(EXT_FAIL_COUNT_KEY_, String(n), EXT_FAIL_WINDOW_SEC_);
+    if (n >= EXT_FAIL_LIMIT_) {
+      cache.put(EXT_FAIL_BLOCK_KEY_, '1', EXT_FAIL_WINDOW_SEC_);
+      cache.remove(EXT_FAIL_COUNT_KEY_);
+      Logger.log(`ext_ingest_reviews: 無効トークンが ${EXT_FAIL_LIMIT_} 回に達したため ${EXT_FAIL_WINDOW_SEC_} 秒間拒否します`);
+    }
+  } catch (e) { /* 制限の失敗で本処理は止めない */ }
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const key = EXT_FAIL_PROP_PREFIX_ + billingToday_();
+    props.setProperty(key, String((Number(props.getProperty(key)) || 0) + 1));
+  } catch (e) { /* 同上 */ }
+}
+
 // ===== doPost action=ext_ingest_reviews =====
 
 /** 戻り値をそのまま webapp.gs 側で jsonResponse_ する。payload: { token, dry_run, reviews } */
@@ -163,7 +200,10 @@ function handleExtIngestReviews_(payload) {
     payload = payload || {};
     const token = payload.token;
 
+    if (isExtAuthThrottled_()) return extError_('busy');   // トークン照合・シート参照より前
+
     const auth = resolveExtToken_(token);
+    if (auth.status !== 'ok') recordExtAuthFailure_();
     if (auth.status === 'revoked') return extError_('token_revoked');
     if (auth.status !== 'ok') return extError_('unauthorized');
     const tenantId = auth.tenant_id;
@@ -310,6 +350,34 @@ function checkExtStale_() {
       appendBillingEvent_(t.tenant_id, 'system', EXT_STALE_EVENT_, '', '', `${today} days=${days}`);
       done.push(t.tenant_id);
     } catch (e) { Logger.log(`checkExtStale_ error [${t.tenant_id}]: ${e.message}`); }
+  });
+  return done;
+}
+
+// ===== 無効トークン件数の日次通知（checkBillingDaily から try/catch 付きで呼ぶ） =====
+//
+// 前日以前の日別件数（Script Properties EXT_AUTHFAIL__yyyy-MM-dd）を ADMIN_EMAIL へ通知し、通知済みのキーを削除する。
+// ADMIN_EMAIL 未設定ならログのみ（キーは残す）。メール本文は日付と件数のみ。戻り値: 通知した日付の配列
+function checkExtAuthFailures_() {
+  const today = billingToday_();
+  const props = PropertiesService.getScriptProperties();
+  const adminEmail = props.getProperty('ADMIN_EMAIL');
+  const all = props.getProperties();
+  const done = [];
+  Object.keys(all).filter(k => k.indexOf(EXT_FAIL_PROP_PREFIX_) === 0).sort().forEach(k => {
+    const day = k.substring(EXT_FAIL_PROP_PREFIX_.length);
+    if (day >= today) return;
+    const n = Number(all[k]) || 0;
+    const body = [
+      `${day} に、レビュー取込（Chrome 拡張）の受け口へ無効なトークンでのアクセスが ${n} 件ありました。`,
+      `（${EXT_FAIL_WINDOW_SEC_} 秒あたり ${EXT_FAIL_LIMIT_} 件を超えると一時的に拒否します）`,
+      '',
+      '心当たりがなければ、該当しうるテナントの拡張用トークンを管理画面で失効→再発行してください。',
+    ].join('\n');
+    if (!adminEmail) { Logger.log(`checkExtAuthFailures_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return; }
+    MailApp.sendEmail(adminEmail, `[step-samurai] 拡張用トークンの無効アクセス（${day}: ${n}件）`, body);
+    props.deleteProperty(k);
+    done.push(day);
   });
   return done;
 }

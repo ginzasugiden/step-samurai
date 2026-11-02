@@ -122,11 +122,11 @@ function importReviewsFromCsv_(tenantId, csvText, preview) {
     return {
       review_id:    reviewId,
       order_number: orderNumber,
-      buyer_key:    get(r, 'buyer_key'),
-      item_code:    get(r, 'item_code'),
+      buyer_key:    sheetSafeText_(get(r, 'buyer_key')),
+      item_code:    sheetSafeText_(get(r, 'item_code')),
       rating:       isNaN(ratingNum) ? 0 : ratingNum,
       posted_at:    postedAt,
-      body:         bodyText.substring(0, 5000),
+      body:         sheetSafeText_(bodyText.substring(0, 5000)),
     };
   }).filter(x => x.order_number);
 

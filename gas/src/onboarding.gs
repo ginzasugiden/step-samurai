@@ -144,7 +144,7 @@ function updateMasterTenantFields_(tenantId, fields) {
   const header = data[0];
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][header.indexOf('tenant_id')]) !== tenantId) continue;
-    Object.keys(fields).forEach(k => { const c = header.indexOf(k); if (c >= 0 && fields[k] !== undefined) sheet.getRange(i + 1, c + 1).setValue(fields[k]); });
+    Object.keys(fields).forEach(k => { const c = header.indexOf(k); if (c >= 0 && fields[k] !== undefined) sheet.getRange(i + 1, c + 1).setValue(sheetSafeText_(fields[k])); });
     _masterRowsCache = null;
     return true;
   }

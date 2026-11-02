@@ -68,7 +68,7 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - login: tenant_id（正規化・形式外は共通バケット）ごとに 15 分で 10 回失敗 → 15 分拒否（`loginAttempt_`、CacheService）。存在しない tenant_id も同じ扱いで応答は常に `unauthorized`。失敗の日別件数は `LOGIN_FAIL__<日付>`、日次 `checkLoginFailures_` が ADMIN_EMAIL へ通知。正しいパスワードでも制限中は拒否（ロックアウト）。
 - 招待コード: 小文字16進40文字（約154bit）。形式外はシートを開く前に拒否。`onboard_check` / `onboard_submit` は無効コード 600 秒で 30 回 → 600 秒拒否（有効コードは通る）。
 - 管理機能（`requireAdmin_`＝doPost の ADMIN_ACTIONS_ のみが入口）: 照合失敗が 600 秒で 10 回 → 600 秒、不一致を拒否（応答は常に `unauthorized`）。**正しい ADMIN_TOKEN は制限中でも通る**。比較は定数時間の `hash_equals_`、未設定は常に拒否。日別件数 `ADMIN_AUTHFAIL__<日付>` を日次 `checkAdminAuthFailures_` が通知。
-- ADMIN_TOKEN の入れ替え: GAS エディタで `rotateAdminToken`（引数なし）を人が実行 → 実行ログに出る新しい値を**その場で控える**（再表示不可。控え忘れたら再実行）。旧い値は即無効なので、管理画面（開き直して新しい値でログイン）と ADMIN_TOKEN を使う全クライアントが新しい値に設定し直すまで使えない。入れ替え時刻は `ADMIN_TOKEN_ROTATED_AT`（時刻のみ）。管理画面はトークンをメモリにだけ持つ（保存しない）。
+- ADMIN_TOKEN の入れ替え: GAS エディタで `rotateAdminToken`（引数なし）を人が実行 → 実行ログに出る新しい値を**その場で控える**（再表示不可。控え忘れたら再実行）。旧い値は即無効なので、管理画面（開き直して新しい値でログイン）と ADMIN_TOKEN を使う全クライアントが新しい値に設定し直すまで使えない。入れ替え時刻は `ADMIN_TOKEN_ROTATED_AT`（時刻のみ）。管理画面はトークンをメモリにだけ持つ（保存しない）。 初回の入れ替えと管理画面への再ログインは 2026-11-03 に完了済み（実施: とみぃ）。
 - 乱数は `Utilities.getUuid()`（UUIDv4・122bit）を使う。ADMIN_TOKEN / REVIEW_INGEST_KEY は人が決める値なので十分長いランダム文字列（32文字以上）にすること。
 
 ### Drive スコープ（2026-10-25〜）

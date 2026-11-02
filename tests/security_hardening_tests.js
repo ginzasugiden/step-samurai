@@ -260,4 +260,87 @@ t('onboard_check: 無効コードが 30 回で一時拒否。有効コードは�
   ctx.onboardCheck_({ invite: code }); assert.equal(cacheStore.invite_fail_count, '5', '有効コードの成功は数えない');
 });
 
+console.log('review_id 制限（validateExtRow_ 経由）');
+const rowWith = id => ({ review_id: id, order_number: ORD(1), rating: 5, posted_at: '2026/9/1 9:05:03' });
+t('https://review.rakuten.co.jp/ 配下のみ通る', () => {
+  ['https://review.rakuten.co.jp/item/1/shop_1/', 'https://review.rakuten.co.jp/a', 'https://review.rakuten.co.jp/shop/x?y=1#z'].forEach(u => assert.ok(ctx.validateExtRow_(rowWith(u)).rec, u));
+});
+t('http・別ホスト・サブドメイン偽装・@ 偽装・空白入り・パスなし・500 文字超は reason=review_id', () => {
+  const bad = ['http://review.rakuten.co.jp/a', 'https://evil.example.com/a', 'https://review.rakuten.co.jp.evil.com/a', 'https://review.rakuten.co.jp@evil.com/a',
+    'https://review.rakuten.co.jp/a b', 'https://review.rakuten.co.jp/a\tb', 'https://review.rakuten.co.jp', 'https://REVIEW.rakuten.co.jp.x/a', ' ftp://review.rakuten.co.jp/a', '',
+    'https://review.rakuten.co.jp/' + 'a'.repeat(500)];
+  bad.forEach(u => assert.deepEqual(ctx.validateExtRow_(rowWith(u)), { reason: 'review_id' }, u.slice(0, 60)));
+  assert.deepEqual(ctx.validateExtRow_(rowWith(12345)), { reason: 'review_id' }); assert.deepEqual(ctx.validateExtRow_(rowWith(null)), { reason: 'review_id' });
+});
+
+console.log('管理機能（ADMIN_TOKEN）の回数制限');
+const ADM = 'adm';   // テスト用モックの値（本番の値ではない）
+const admOk = tk => { try { ctx.requireAdmin_(tk); return true; } catch (e) { return e.message === 'unauthorized' ? false : (() => { throw e; })(); } };
+const admDay = () => props['ADMIN_AUTHFAIL__' + fmtDay()];
+t('正しいトークンは通り、不一致は unauthorized。未設定は常に拒否(fail-closed)', () => {
+  clearCache(); clearProps('ADMIN_AUTHFAIL__'); fakeNow = new Date('2026-12-20T09:00:00+09:00');
+  assert.equal(admOk(ADM), true); assert.equal(admOk('wrong'), false); assert.equal(admDay(), '1');
+  const saved = props.ADMIN_TOKEN; delete props.ADMIN_TOKEN;
+  assert.equal(admOk(ADM), false); assert.equal(admOk(''), false); assert.equal(admOk(undefined), false); props.ADMIN_TOKEN = '';
+  assert.equal(admOk(''), false); props.ADMIN_TOKEN = saved;
+});
+t('比較は hash_equals_（定数時間）: 長さ違い・同長で1文字違い・先頭一致の短縮は拒否、完全一致のみ許可', () => {
+  assert.equal(ctx.hash_equals_('abcdef', 'abcdef'), true);
+  assert.equal(ctx.hash_equals_('abcdef', 'abcdeg'), false); assert.equal(ctx.hash_equals_('abcdef', 'abcde'), false); assert.equal(ctx.hash_equals_('abcde', 'abcdef'), false);
+  assert.equal(ctx.hash_equals_('abc', 'abc\u0000'), false, 'NUL 付加でも一致しない'); assert.equal(ctx.hash_equals_('', ''), true); assert.equal(ctx.hash_equals_('x', ''), false);
+  const src = fs.readFileSync(path.join(SRC, 'auth.gs'), 'utf8'); const body = src.substring(src.indexOf('function hash_equals_'), src.indexOf('// ===== tenant_auth'));
+  assert.ok(!/a\.length\s*!==\s*b\.length/.test(body), '長さの早期 return が無い');
+  const reqSrc = src.substring(src.indexOf('function requireAdmin_'), src.indexOf('/** 定数時間比較'));
+  assert.ok(reqSrc.includes('hash_equals_(stored, adminToken)') && !/===\s*adminToken|adminToken\s*===/.test(reqSrc), 'requireAdmin_ は hash_equals_ 経由');
+  clearCache(); assert.equal(admOk('ad'), false); assert.equal(admOk('admx'), false); assert.equal(admOk('adn'), false); assert.equal(admOk('adm'), true);
+});
+t('10 回失敗で拒否状態。拒否中も正しいトークンは通り、不一致は数え増さず応答も同じ unauthorized', () => {
+  clearCache(); clearProps('ADMIN_AUTHFAIL__');
+  for (let i = 0; i < 9; i++) assert.equal(admOk('bad' + i), false);
+  assert.equal(admOk(ADM), true, '9 回目までは通る'); assert.equal(cacheStore.admin_auth_fail_block, undefined);
+  assert.equal(admOk('bad9'), false); assert.equal(cacheStore.admin_auth_fail_block, '1');
+  assert.equal(admDay(), '10');
+  assert.equal(admOk(ADM), true, '制限中でも正しいトークンは通る');
+  for (let i = 0; i < 5; i++) assert.equal(admOk('bad-more' + i), false);
+  assert.equal(admDay(), '10', '制限中の不一致は数え増さない');
+  const post = tk => JSON.parse(JSON.stringify(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'list_tenants', token: tk, payload: {} }) } })));
+  assert.deepEqual(post('nope'), { ok: false, error: 'unauthorized' }); assert.equal(post(ADM).ok, true, 'doPost 経由でも制限中に正規が通る');
+});
+t('600 秒経過相当で解除され、再び数えられる', () => {
+  Object.keys(cacheStore).filter(k => k.indexOf('admin_auth_fail') === 0).forEach(k => delete cacheStore[k]);
+  assert.equal(admOk('again'), false); assert.equal(admDay(), '11'); assert.equal(cacheStore.admin_auth_fail_count, '1');
+});
+t('制限はテナント系処理(login / 店舗トークン / ext)に影響しない', () => {
+  clearCache(); for (let i = 0; i < 12; i++) admOk('x' + i); assert.equal(cacheStore.admin_auth_fail_block, '1');
+  ctx.setTenantPassword_('shopa', 'correct-horse-9'); assert.ok(ctx.loginAttempt_('shopa', 'correct-horse-9'));
+  const tk = ctx.issueTenantToken_('shopa'); assert.equal(ctx.verifyTenantToken_(tk), 'shopa');
+  assert.equal(call(ctx.issueExtToken_('shopa'), [], { dry_run: true }).ok, true);
+});
+t('日次通知: 前日以前の件数を ADMIN_EMAIL へ(件数のみ)。当日分は残す。未設定ならログのみ。checkBillingDaily から呼ばれる', () => {
+  clearCache(); clearProps('ADMIN_AUTHFAIL__'); mails.length = 0; fakeNow = new Date('2026-12-21T09:00:00+09:00');
+  props['ADMIN_AUTHFAIL__2026-12-20'] = '14'; props['ADMIN_AUTHFAIL__2026-12-21'] = '2';
+  delete props.ADMIN_EMAIL; assert.deepEqual(ctx.checkAdminAuthFailures_(), []); assert.equal(mails.length, 0); assert.ok(props['ADMIN_AUTHFAIL__2026-12-20']);
+  props.ADMIN_EMAIL = 'admin@example.jp'; assert.deepEqual(ctx.checkAdminAuthFailures_(), ['2026-12-20']);
+  assert.equal(mails.length, 1); assert.ok(mails[0].subject.includes('管理機能の認証失敗') && mails[0].subject.includes('14件')); assert.ok(!mails[0].body.includes(ADM));
+  assert.equal(props['ADMIN_AUTHFAIL__2026-12-20'], undefined); assert.equal(props['ADMIN_AUTHFAIL__2026-12-21'], '2');
+  mails.length = 0; props['ADMIN_AUTHFAIL__2026-12-19'] = '3'; ctx.checkBillingDaily(); assert.ok(mails.some(m => m.subject.includes('管理機能の認証失敗')));
+});
+
+console.log('rotateAdminToken');
+t('新しい値は hex 192 文字(約732bit)・毎回異なる・ログに1回だけ。旧い値はログ・プロパティ・戻り値のどこにも出ない。ROTATED_AT は時刻のみ', () => {
+  const OLD = 'OLD-ADMIN-VALUE-MARKER-' + 'q'.repeat(30); props.ADMIN_TOKEN = OLD; props.OTHER_KEEP = 'keep'; const before = JSON.stringify(Object.assign({}, props, { ADMIN_TOKEN: 0, ADMIN_TOKEN_ROTATED_AT: 0 }));
+  logs.length = 0; fakeNow = new Date('2026-12-22T09:30:15+09:00');
+  const ret = ctx.rotateAdminToken(); assert.equal(ret, undefined);
+  const v1 = props.ADMIN_TOKEN; assert.ok(/^[0-9a-f]{192}$/.test(v1), '長さ・文字種'); assert.notEqual(v1, OLD);
+  assert.equal(logs.filter(l => l.includes(v1)).length, 1, '新しい値は実行ログに1回だけ');
+  assert.ok(!logs.join('\n').includes(OLD) && !logs.join('\n').includes('OLD-ADMIN'), '旧い値はログに出ない');
+  assert.ok(!JSON.stringify(Object.assign({}, props, { ADMIN_TOKEN: 0 })).includes(OLD), '旧い値はどのプロパティにも残らない');
+  assert.equal(props.ADMIN_TOKEN_ROTATED_AT, '2026-12-22 09:30:15'); assert.ok(!props.ADMIN_TOKEN_ROTATED_AT.includes(v1));
+  assert.equal(JSON.stringify(Object.assign({}, props, { ADMIN_TOKEN: 0, ADMIN_TOKEN_ROTATED_AT: 0 })), before, '他の Script Properties は変わらない');
+  const seen = new Set([v1]); for (let i = 0; i < 20; i++) { ctx.rotateAdminToken(); seen.add(props.ADMIN_TOKEN); } assert.equal(seen.size, 21, '毎回異なる');
+  assert.equal(admOk(OLD), false, '旧い値は使えない'); assert.equal(admOk(props.ADMIN_TOKEN), true, '新しい値は使える');
+  const src = fs.readFileSync(path.join(SRC, 'auth.gs'), 'utf8'); const fn = src.substring(src.indexOf('function rotateAdminToken'));
+  assert.ok(!/getProperty\(/.test(fn), '上書き前に旧値を読まない(getProperty を呼ばない)'); props.ADMIN_TOKEN = ADM;
+});
+
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

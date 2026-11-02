@@ -8,17 +8,19 @@
 
 function requireAdmin_(adminToken) {
   const stored = PropertiesService.getScriptProperties().getProperty('ADMIN_TOKEN');
-  if (!stored || !hash_equals_(stored, adminToken)) {
-    throw new Error('unauthorized');
-  }
+  const throttled = isAdminAuthThrottled_();
+  if (stored && hash_equals_(stored, adminToken)) return;   // 一致すれば制限中でも通す。ADMIN_TOKEN 未設定は常に不一致 = fail-closed
+  if (!throttled) recordAdminAuthFailure_();                // 数えるのは照合に失敗したものだけ。制限中の不一致は数え増さない
+  throw new Error('unauthorized');
 }
 
+/** 定数時間比較: 長さが違っても長い方の長さぶん必ず回し、長さの差も結果に畳み込む（長さの早期 return をしない） */
 function hash_equals_(a, b) {
   a = String(a); b = String(b);
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const n = Math.max(a.length, b.length);
+  let result = a.length ^ b.length;
+  for (let i = 0; i < n; i++) {
+    result |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   }
   return result === 0;
 }
@@ -354,4 +356,84 @@ function purgeExpiredSessions_(sheet) {
       sheet.deleteRow(i + 1);
     }
   }
+}
+
+// ===== 管理機能（ADMIN_TOKEN 認証）の回数制限 =====
+//
+// reviews_ext.gs の拡張トークンと同方式: 照合に失敗したものだけを数え、ADMIN_FAIL_WINDOW_SEC_ 秒で ADMIN_FAIL_LIMIT_ 回失敗したら
+// ADMIN_FAIL_WINDOW_SEC_ 秒間、不一致を拒否する（正しい ADMIN_TOKEN は制限中でも通す = 管理者が締め出されない）。
+// 制限中に来た不一致は数え増さない。応答は制限の有無にかかわらず既存の 'unauthorized' のまま（busy にしない）。
+//   理由: 管理 API は ADMIN_TOKEN を持つ人しか使わず再試行を促す必要がない。応答を変えないほうが制限の発動を攻撃者に知らせない。
+// 日別の失敗件数（件数のみ。入力値は保存しない）は Script Properties ADMIN_AUTHFAIL__<日付> に積み、日次 checkAdminAuthFailures_ が通知する。
+// 入口は doPost → handleAdminAction_（admin_api.gs）の requireAdmin_ だけ（他に requireAdmin_ の呼び出し元は無い）。
+const ADMIN_FAIL_LIMIT_ = 10;
+const ADMIN_FAIL_WINDOW_SEC_ = 600;
+const ADMIN_FAIL_PROP_PREFIX_ = 'ADMIN_AUTHFAIL__';
+
+function isAdminAuthThrottled_() {
+  try { return !!CacheService.getScriptCache().get('admin_auth_fail_block'); } catch (e) { return false; }
+}
+
+function recordAdminAuthFailure_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = (Number(cache.get('admin_auth_fail_count')) || 0) + 1;
+    cache.put('admin_auth_fail_count', String(n), ADMIN_FAIL_WINDOW_SEC_);
+    if (n >= ADMIN_FAIL_LIMIT_) {
+      cache.put('admin_auth_fail_block', '1', ADMIN_FAIL_WINDOW_SEC_);
+      cache.remove('admin_auth_fail_count');
+      Logger.log(`管理機能の認証失敗が ${ADMIN_FAIL_LIMIT_} 回に達したため ${ADMIN_FAIL_WINDOW_SEC_} 秒間、不一致を拒否します`);
+    }
+  } catch (e) { /* 制限の失敗で認証自体は止めない（常に照合する） */ }
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const key = ADMIN_FAIL_PROP_PREFIX_ + billingToday_();
+    props.setProperty(key, String((Number(props.getProperty(key)) || 0) + 1));
+  } catch (e) { /* 同上 */ }
+}
+
+/** 前日以前の管理機能の認証失敗件数を ADMIN_EMAIL へ通知する（checkBillingDaily から try/catch 付き）。本文は日付と件数のみ */
+function checkAdminAuthFailures_() {
+  const today = billingToday_();
+  const props = PropertiesService.getScriptProperties();
+  const adminEmail = props.getProperty('ADMIN_EMAIL');
+  const all = props.getProperties();
+  const done = [];
+  Object.keys(all).filter(k => k.indexOf(ADMIN_FAIL_PROP_PREFIX_) === 0).sort().forEach(k => {
+    const day = k.substring(ADMIN_FAIL_PROP_PREFIX_.length);
+    if (day >= today) return;
+    const n = Number(all[k]) || 0;
+    const body = [
+      `${day} に、管理機能の認証失敗が ${n} 件ありました。`,
+      `（${ADMIN_FAIL_WINDOW_SEC_} 秒で ${ADMIN_FAIL_LIMIT_} 回失敗すると、その間は不一致を拒否します。正しいトークンは常に通ります）`,
+      '',
+      '心当たりがなければ rotateAdminToken() で ADMIN_TOKEN を入れ替えてください（手順は CLAUDE.md）。',
+    ].join('\n');
+    if (!adminEmail) { Logger.log(`checkAdminAuthFailures_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return; }
+    MailApp.sendEmail(adminEmail, `[step-samurai] 管理機能の認証失敗（${day}: ${n}件）`, body);
+    props.deleteProperty(k);
+    done.push(day);
+  });
+  return done;
+}
+
+// ===== ADMIN_TOKEN の入れ替え（GAS エディタで人が実行する。引数なし） =====
+//
+// 手順: GAS エディタで関数 rotateAdminToken を選んで「実行」→ 実行ログに表示された新しい値をその場で控える。
+//  - 実行ログは実行履歴に残るが、再表示はできない。控え忘れ・失敗したら、もう一度 rotateAdminToken を実行すればよい（その都度新しい値になる）。
+//  - 入れ替えた瞬間から旧い値は使えなくなる。管理画面（webui/admin.html）と、ADMIN_TOKEN を使う全クライアント
+//    （docs の手順で作ったスクリプトなど）は新しい値を設定し直すまで使えない。管理画面は開き直して新しい値でログインし直す。
+//  - 旧い値は読まない・ログに出さない。他の Script Properties には触れない。記録するのは入れ替え時刻（ADMIN_TOKEN_ROTATED_AT）だけ。
+//  - 生成: UUID(hex) を 6 個連結 = 192 文字。各 UUID の固定 6bit を除いても 6 × 122 = 732bit。
+const ADMIN_TOKEN_UUID_PARTS_ = 6;
+
+function rotateAdminToken() {
+  let token = '';
+  for (let i = 0; i < ADMIN_TOKEN_UUID_PARTS_; i++) token += Utilities.getUuid().replace(/-/g, '');
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('ADMIN_TOKEN', token);
+  props.setProperty('ADMIN_TOKEN_ROTATED_AT', Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'));
+  Logger.log('ADMIN_TOKEN を入れ替えました。新しい値（この1回だけ表示。今すぐ控えてください）:');
+  Logger.log(token);
+  Logger.log('旧い値は無効になりました。管理画面ほか ADMIN_TOKEN を使うクライアントは新しい値で設定し直してください。');
 }

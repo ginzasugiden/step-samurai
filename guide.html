@@ -115,7 +115,7 @@ footer nav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
 <p>パソコンの Chrome が使える場合の方法です。楽天 RMS のレビューチェックツールを開くと、1日1回まで自動で取り込まれます。</p>
 <h3>拡張機能の入れ方</h3>
 <ol class="steps">
-<li>運営からメールで届く<b>限定公開のリンク</b>を、Chrome で開きます。</li>
+<li>Chrome ウェブストアの<b>限定公開ページ</b>を、パソコンの Chrome で開きます（URL を知っている方だけがインストールできます）。<br><a href="https://chromewebstore.google.com/detail/nhokckohpjajdnijfodpaimecfghlfch" target="_blank" rel="noopener">https://chromewebstore.google.com/detail/nhokckohpjajdnijfodpaimecfghlfch</a></li>
 <li>「Chrome に追加」を押して、確認画面で追加します。</li>
 </ol>
 <h3>トークンの設定</h3>
@@ -149,7 +149,7 @@ footer nav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
 
 <div class="card">
 <h3>方法2: CSV をアップロードする</h3>
-<p>拡張機能を入れられない場合や、拡張機能が使えない間は、CSV のアップロードで取り込めます。月1回程度が目安です。</p>
+<p>拡張機能を入れられない場合や、拡張機能が使えない間は、CSV のアップロードで取り込めます。週1回のアップロードをおすすめします。</p>
 <ol class="steps">
 <li>RMS の「レビューチェックツール」から、レビューの CSV をダウンロードします。</li>
 <li>管理画面（店舗ログイン）の「レビュー取込」タブで、そのファイルを選びます（列の順番や余分な列は自動で判定されます）。</li>
@@ -163,10 +163,11 @@ footer nav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
 <details open><summary>自社のGmailにテストメールが届きません</summary><div>お客様宛のメールは、楽天のあんしんメルアド（マスクアドレス）経由で送られるため、一般のメールアドレス宛には届きません。管理画面の「テスト送信」はフォローメールのみで、店舗連絡先メールアドレス宛にのみ送信されます（他の宛先には送れません）。試験運転（dry_run）の間は送信されません。送信前の文面は、運営がメールでお送りします。</div></details>
 <details open><summary>過去のお客様に一斉送信されませんか</summary><div>されません。稼働開始日以降に発送した注文だけが対象です。それ以前の注文には送りません。</div></details>
 <details open><summary>低評価のレビューをくださったお客様にもお礼メールが届きますか</summary><div>レビューお礼メールは、評価が低いもの（既定は星3未満）には自動送信しません。内容を確認して個別に対応することをおすすめします。基準は運営の設定によります。なお、発送後のフォローメールは評価とは別に、発送後の指定日数で送信されます。</div></details>
-<details open><summary>レビューお礼メールはどう届きますか</summary><div>レビュー情報を取り込むと、条件を満たす注文へ自動で送信されます。取り込みは、Chrome 拡張機能（RMS のレビューチェックツールを開くと1日1回まで自動で同期）か、管理画面「レビュー取込」タブでの CSV アップロード（月1回程度）のどちらかで行います。手順は<a href="#review">レビューの取り込み</a>をご覧ください。</div></details>
+<details open><summary>レビューお礼メールはどう届きますか</summary><div>レビュー情報を取り込むと、条件を満たす注文へ自動で送信されます。取り込みは、Chrome 拡張機能（RMS のレビューチェックツールを開くと1日1回まで自動で同期）か、管理画面「レビュー取込」タブでの CSV アップロード（週1回をおすすめします）のどちらかで行います。手順は<a href="#review">レビューの取り込み</a>をご覧ください。</div></details>
 <details open><summary>クーポンは使えますか</summary><div>クーポン発行機能は準備中です。現在は、フォローメール・レビューお礼メール・店舗分析をご提供しています。クーポンは、提供開始時に追加料金なしで有効化します。</div></details>
 <details open><summary>licenseKey の更新はどうすればよいですか</summary><div>RMS で新しいキーを発行し、管理画面の「認証情報」から更新してください。有効期限の30日前に運営者へ通知が届き、運営者から更新のお願いをご連絡します。</div></details>
 <details open><summary>メールを止めてほしいお客様がいます</summary><div>管理画面の「除外注文」タブに注文番号を登録してください（登録した注文にはフォロー・お礼メールを送りません。解除もできます）。または運営へご連絡ください。すでに送信済みのメールは取り消せません。</div></details>
+<details open><summary>管理画面にログインできません</summary><div>パスワードの入力を間違えた場合などに、<b>同じ店舗IDで15分の間に10回失敗すると、15分間ログインできなくなります</b>。この間は、正しいパスワードを入力しても入れません。時間がたつと自動で解除されますので、15分ほど待ってから、もう一度お試しください。それでも入れない場合は、<a href="mailto:ginzasugiden@gmail.com">ginzasugiden@gmail.com</a> へご連絡ください。</div></details>
 <details open><summary>解約したい</summary><div>解約を希望する月の前月末日までに、<a href="mailto:ginzasugiden@gmail.com">ginzasugiden@gmail.com</a> へお申し出ください（例: 11月末で解約する場合は10月31日まで）。解約日は解約希望月の末日です。解約後のデータの扱いは<a href="terms.html#art8">利用規約第8条</a>をご覧ください。</div></details>
 
 <p class="note">1回（毎時）の実行で送信するメールは最大50件です。多数の注文がたまっている場合は、数回に分けて順次送信します。</p>

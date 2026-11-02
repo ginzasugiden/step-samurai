@@ -55,6 +55,7 @@ const ctx = { Utilities, Logger, UrlFetchApp, getRmsAuthHeader_, getRmsCredentia
 const vm = require('vm');
 vm.createContext(ctx);
 ['analytics_agg.gs', 'rakuten_api.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
+{ const t = load('tenant.gs'); const k = t.indexOf('function sheetSafeText_('); vm.runInContext(t.substring(k, t.indexOf('}', t.indexOf('return /', k)) + 1), ctx); }   // 数式インジェクション対策の共通関数だけ取り込む
 
 let pass = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ' + name); } catch (e) { console.log('  FAIL ' + name + '\n       ' + e.message); process.exitCode = 1; } };
@@ -118,6 +119,15 @@ const rmsOrder = (n, prog, extra) => Object.assign({
   CouponModelList: [{ couponCode: 'ABC' }],
 }, extra);
 
+t('buildOrderRow_: 購入者名・メール・商品名の先頭 = + - @ は無害化（新規・既存行の往復とも）。数値・日付はそのまま', () => {
+  const o = rmsOrder('N9', 500, { OrdererModel: { emailAddress: '-x@example.jp', familyName: '=HYPERLINK("http://x")', firstName: '', prefecture: '東京都' } });
+  const row = ctx.buildOrderRow_(HEADER17, o, null);
+  assert.equal(row[HEADER17.indexOf('buyer_key')], "'-x@example.jp"); assert.equal(row[HEADER17.indexOf('buyer_name')], "'=HYPERLINK(\"http://x\")");
+  assert.strictEqual(row[HEADER17.indexOf('amount')], 6600); assert.equal(row[HEADER17.indexOf('order_date')], '2026-08-27');
+  const again = row.slice(); again[HEADER17.indexOf('item_name')] = '+raw';   // 実シートでは ' が消えて返る
+  assert.equal(ctx.buildOrderRow_(HEADER17, o, again)[HEADER17.indexOf('item_name')], 'バラ10本');
+  const raw = ctx.buildOrderRow_(HEADER17, o, null); raw[HEADER17.indexOf('review_linked')] = '=1'; assert.equal(ctx.buildOrderRow_(HEADER17, o, raw)[HEADER17.indexOf('review_linked')], "'=1");
+});
 t('buildOrderRow_: 17列ヘッダで全列が埋まる', () => {
   const row = ctx.buildOrderRow_(HEADER17, rmsOrder('N1', 500), null);
   const g = c => row[HEADER17.indexOf(c)];

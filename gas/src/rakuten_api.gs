@@ -181,7 +181,7 @@ function buildOrderRow_(header, order, existingRow) {
     set('purchase_count', 1); // 仮値。fetchOrders末尾の recomputePurchaseCounts_ で全行再計算される
     set('review_linked',  'false');
   }
-  return row;
+  return row.map(sheetSafeText_);   // 購入者名・メール・商品名など店舗外の人が書ける値を数式として評価させない（既存行の往復も同様）
 }
 
 /**
@@ -295,7 +295,7 @@ function upsertReview_(sheet, review) {
     review.rating       || 0,
     review.postedDate   || '',
     review.body         || '',
-  ];
+  ].map(sheetSafeText_);
   if (existingRow > 0) {
     sheet.getRange(existingRow + 1, 1, 1, rowData.length).setValues([rowData]);
   } else {

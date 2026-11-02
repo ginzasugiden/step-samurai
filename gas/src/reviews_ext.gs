@@ -18,7 +18,12 @@
  *  - dry_run は検証と件数だけ（シート・認証シートへ一切書かない）。
  *  - review_id は https://review.rakuten.co.jp/ 配下の URL のみ受け付ける（それ以外は invalid）。
  *  - 無効トークン（不明・失効・形式不正）は CacheService で数え、EXT_FAIL_LIMIT_ 回/EXT_FAIL_WINDOW_SEC_ 秒を超えたら
- *    一時的に 'busy' で拒否する（トークン照合・シート参照より前）。日別の件数は Script Properties に積み、日次 checkExtAuthFailures_ で
+ *    一時的に 'busy' で拒否する。ただし照合に成功した正規トークンは制限中でも受け付ける（照合失敗のものだけが対象。制限中の無効分は
+ *    数え増さず 'busy' を返す = 攻撃者に認証結果の差を見せず、正規ユーザーには再試行を促す）。
+ *  - 照合は有効/失効 ext_review のハッシュ一覧（ハッシュ→tenant_id/状態。平文は載せない）を CacheService に EXT_TOKEN_CACHE_SEC_ 秒載せて行い、
+ *    無効リクエストのたびに認証シートを開かない。キャッシュに無いハッシュ＝不明。キャッシュ未載せ（ミス）のときだけシートを読んで載せ直す
+ *    （制限中は EXT_TOKEN_REFRESH_GUARD_SEC_ 秒に1回まで）。発行・失効でキャッシュを破棄するので失効は即時反映。
+ *    サイズが EXT_TOKEN_CACHE_MAX_CHARS_ を超える場合は載せずシート読みにフォールバック（制限中は不明扱い）。日別の件数は Script Properties に積み、日次 checkExtAuthFailures_ で
  *    ADMIN_EMAIL へ件数だけ通知する（トークン・URL・本文は出さない）。
  */
 
@@ -33,6 +38,11 @@ const EXT_FAIL_WINDOW_SEC_ = 600;
 const EXT_FAIL_COUNT_KEY_ = 'ext_auth_fail_count';
 const EXT_FAIL_BLOCK_KEY_ = 'ext_auth_fail_block';
 const EXT_FAIL_PROP_PREFIX_ = 'EXT_AUTHFAIL__';
+const EXT_TOKEN_CACHE_KEY_ = 'ext_token_hashes';
+const EXT_TOKEN_CACHE_SEC_ = 60;
+const EXT_TOKEN_CACHE_MAX_CHARS_ = 90000;   // CacheService の値上限（100KB）より安全側
+const EXT_TOKEN_REFRESH_GUARD_KEY_ = 'ext_token_refresh_guard';
+const EXT_TOKEN_REFRESH_GUARD_SEC_ = 30;
 const EXT_TOKEN_RE_ = /^sse_[A-Za-z0-9]{16,200}$/;
 const EXT_REVIEW_ID_RE_ = /^https:\/\/review\.rakuten\.co\.jp\/[^\s]*$/;
 
@@ -72,6 +82,7 @@ function issueExtToken_(tenantId) {
   row[idx('tenant_id')] = tenantId; row[idx('token_hash')] = hashToken_(token);
   row[idx('issued_at')] = nowJst_(); row[idx('status')] = 'active'; row[idx('kind')] = EXT_TOKEN_KIND_;
   sheet.appendRow(row);
+  invalidateExtTokenCache_();
   Logger.log(`[管理者用] 拡張用トークンを発行しました tenant_id=${tenantId}（平文はログに残していません）`);
   return token;
 }
@@ -89,29 +100,66 @@ function revokeExtToken_(tenantId) {
       sheet.getRange(i + 1, idx('status') + 1).setValue('revoked'); n++;
     }
   }
+  invalidateExtTokenCache_();
   return n;
+}
+
+/** トークン一覧のキャッシュを破棄する（発行・失効の直後に呼ぶ。失効を即時反映するため） */
+function invalidateExtTokenCache_() {
+  try { CacheService.getScriptCache().remove(EXT_TOKEN_CACHE_KEY_); } catch (e) { /* キャッシュ障害でも TTL で自然に切れる */ }
+}
+
+/** tenant_auth の ext_review 行から { ハッシュ: [tenant_id, 'a'|'r'] } を作る（有効が失効より優先）。ハッシュのみで平文は扱わない */
+function readExtTokenMap_() {
+  const data   = getTenantAuthSheet_().getDataRange().getValues();
+  const header = data[0].map(String);
+  const idx    = c => header.indexOf(c);
+  const map = {};
+  if (idx('kind') < 0) return map;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[idx('kind')]) !== EXT_TOKEN_KIND_) continue;
+    const h = String(row[idx('token_hash')]);
+    if (!h) continue;
+    const active = row[idx('status')] === 'active';
+    if (active || !map[h]) map[h] = [String(row[idx('tenant_id')]), active ? 'a' : 'r'];
+  }
+  return map;
+}
+
+/** キャッシュ→（ミス時のみ）シートの順にトークン一覧を得る。戻り値: map | null（制限中でシートを読めない） */
+function getExtTokenMap_(throttled) {
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  try {
+    const hit = cache && cache.get(EXT_TOKEN_CACHE_KEY_);
+    if (hit) return JSON.parse(hit);
+  } catch (e) { /* 壊れたキャッシュはミス扱い */ }
+  if (throttled) {   // 制限中は無効リクエストでシートを開かせない: 載せ直しは一定時間に1回だけ
+    try {
+      if (cache.get(EXT_TOKEN_REFRESH_GUARD_KEY_)) return null;
+      cache.put(EXT_TOKEN_REFRESH_GUARD_KEY_, '1', EXT_TOKEN_REFRESH_GUARD_SEC_);
+    } catch (e) { return null; }
+  }
+  const map = readExtTokenMap_();
+  try {
+    const json = JSON.stringify(map);
+    if (cache && json.length <= EXT_TOKEN_CACHE_MAX_CHARS_) cache.put(EXT_TOKEN_CACHE_KEY_, json, EXT_TOKEN_CACHE_SEC_);
+  } catch (e) { /* 載せられなければ次回もシート読み */ }
+  return map;
 }
 
 /**
  * 平文トークンから { status: 'ok', tenant_id } | { status: 'revoked' } | { status: 'unknown' } を返す。
  * 失効行にハッシュが一致すれば revoked、どの ext_review にも一致しなければ unknown。
+ * ハッシュ（SHA-256）をキーにした一覧引きなので、タイミング差から平文は推測できない。throttled=true のときはシートを読む頻度を絞る。
  */
-function resolveExtToken_(token) {
+function resolveExtToken_(token, throttled) {
   if (typeof token !== 'string' || !EXT_TOKEN_RE_.test(token)) return { status: 'unknown' };   // 形式不正は認証シートを開く前に弾く
-  const hash   = hashToken_(token);
-  const data   = getTenantAuthSheet_().getDataRange().getValues();
-  const header = data[0].map(String);
-  const idx    = c => header.indexOf(c);
-  if (idx('kind') < 0) return { status: 'unknown' };
-  let revoked = false;
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (String(row[idx('kind')]) !== EXT_TOKEN_KIND_) continue;
-    if (!hash_equals_(String(row[idx('token_hash')]), hash)) continue;
-    if (row[idx('status')] === 'active') return { status: 'ok', tenant_id: String(row[idx('tenant_id')]) };
-    revoked = true;
-  }
-  return { status: revoked ? 'revoked' : 'unknown' };
+  const map = getExtTokenMap_(!!throttled);
+  const hit = map ? map[hashToken_(token)] : null;
+  if (!hit) return { status: 'unknown' };
+  return hit[1] === 'a' ? { status: 'ok', tenant_id: hit[0] } : { status: 'revoked' };
 }
 
 /** 有効な ext_review 行の last_used_at に JST 日時を記録する（実書き込み成功時のみ呼ぶ） */
@@ -200,12 +248,14 @@ function handleExtIngestReviews_(payload) {
     payload = payload || {};
     const token = payload.token;
 
-    if (isExtAuthThrottled_()) return extError_('busy');   // トークン照合・シート参照より前
-
-    const auth = resolveExtToken_(token);
-    if (auth.status !== 'ok') recordExtAuthFailure_();
-    if (auth.status === 'revoked') return extError_('token_revoked');
-    if (auth.status !== 'ok') return extError_('unauthorized');
+    // 制限は照合に失敗したものだけに適用する（正規トークンは制限中でも通る）
+    const throttled = isExtAuthThrottled_();
+    const auth = resolveExtToken_(token, throttled);
+    if (auth.status !== 'ok') {
+      if (throttled) return extError_('busy');   // 制限中の無効分は数え増さず busy（認証結果の差を見せない）
+      recordExtAuthFailure_();
+      return extError_(auth.status === 'revoked' ? 'token_revoked' : 'unauthorized');
+    }
     const tenantId = auth.tenant_id;
 
     const t = listAllTenants_().find(x => x.tenant_id === tenantId);

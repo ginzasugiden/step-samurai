@@ -34,7 +34,7 @@ function doPost(e) {
 
     if (action === 'login') {  // 店舗ID＋パスワード → セッショントークン（auth.gs）
       const p = req.payload || {};
-      const s = loginWithPassword_(String(p.tenant_id || '').trim().toLowerCase(), String(p.password || ''));
+      const s = loginAttempt_(p.tenant_id, String(p.password || ''));   // 回数制限付き（auth.gs）
       return jsonResponse_(s ? { ok: true, token: s.token, expires_at: s.expires_at, tenant_id: s.tenant_id, shop_name: s.shop_name } : { ok: false, error: 'unauthorized' });
     }
     if (action === 'fincode_webhook') return jsonResponse_(handleFincodeWebhook_(req.payload || {})); // lolipop/fincode_webhook.php 経由（BRIDGE_TOKEN 認証・未設定なら拒否）

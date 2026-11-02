@@ -32,9 +32,31 @@ function createInvite_(tenantId) {
   return { invite: code, expires_at: fmt(exp) };
 }
 
+// 招待コード = 小文字16進 40 文字（UUID 2 個ぶん: 122bit + 先頭 32bit の乱数 = 約 154bit）。形式外はシートを開く前に弾く
+const INVITE_CODE_RE_ = /^[0-9a-f]{40}$/;
+// 無効コードの回数制限（グローバル）。reviews_ext.gs の拡張トークンと同じ方式: 600 秒で 30 回 → 600 秒拒否。
+// 照合に失敗したものだけが対象で、有効なコードは制限中でも通す（制限中の無効分は数え増さない）。応答は通常の無効と同じ invalid_invite。
+const INVITE_FAIL_LIMIT_ = 30;
+const INVITE_FAIL_WINDOW_SEC_ = 600;
+
+/** onboard_check / onboard_submit 用: verifyInvite_ に無効コードの回数制限を加えたもの（consume はしない） */
+function verifyInviteLimited_(code) {
+  let throttled = false;
+  try { throttled = !!CacheService.getScriptCache().get('invite_fail_block'); } catch (e) { throttled = false; }
+  const tenantId = verifyInvite_(code, false);
+  if (tenantId || throttled) return tenantId;
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = (Number(cache.get('invite_fail_count')) || 0) + 1;
+    cache.put('invite_fail_count', String(n), INVITE_FAIL_WINDOW_SEC_);
+    if (n >= INVITE_FAIL_LIMIT_) { cache.put('invite_fail_block', '1', INVITE_FAIL_WINDOW_SEC_); cache.remove('invite_fail_count'); }
+  } catch (e) { /* 制限の失敗で本処理は止めない */ }
+  return null;
+}
+
 /** 招待コードを検証し tenant_id を返す。無効なら null。consume=true なら使用済みにする */
 function verifyInvite_(code, consume) {
-  if (!code) return null;
+  if (!code || !INVITE_CODE_RE_.test(String(code).trim())) return null;
   const sheet = getInvitesSheet_();
   const data  = sheet.getDataRange().getValues();
   const hash  = hashToken_(String(code).trim());
@@ -51,7 +73,7 @@ function verifyInvite_(code, consume) {
 
 /** 招待コードを渡すと、フォームに表示する店舗名などを返す（秘密情報は含めない） */
 function onboardCheck_(payload) {
-  const tenantId = verifyInvite_(payload.invite, false);
+  const tenantId = verifyInviteLimited_(payload.invite);
   if (!tenantId) return { ok: false, error: 'invalid_invite' };
   const t = listAllTenants_().find(x => x.tenant_id === tenantId);
   if (!t) return { ok: false, error: 'invalid_invite' };
@@ -65,7 +87,7 @@ function onboardCheck_(payload) {
  *          smtp_user, smtp_pass, follow_days(任意), go_live_date(任意・希望日)
  */
 function onboardSubmit_(payload) {
-  const tenantId = verifyInvite_(payload.invite, false);
+  const tenantId = verifyInviteLimited_(payload.invite);
   if (!tenantId) return { ok: false, error: 'invalid_invite' };
   if (String(payload.terms_version || '') !== TERMS_VERSION) return { ok: false, error: 'terms_not_agreed' };   // fail-closed: 何も保存せず招待も消費しない
 

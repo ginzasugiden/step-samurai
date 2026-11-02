@@ -154,7 +154,7 @@ function setTenantSettingValue_(tenantId, key, value) {
     if (data[i][keyIdx] === key) {
       const editable = String(data[i][editableIdx]).toUpperCase() === 'TRUE';
       if (!editable) return { ok: false, error: 'not_editable' };
-      sheet.getRange(i + 1, valueIdx + 1).setValue(value);
+      sheet.getRange(i + 1, valueIdx + 1).setValue(sheetSafeText_(value));   // 店舗入力: 数式として評価させない（文字列のみ対象）
       invalidateTenantConfigCache_(tenantId);
       return { ok: true };
     }
@@ -239,8 +239,8 @@ function setTenantTemplate_(tenantId, templateId, subject, body) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][idIdx] === templateId) {
       const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
-      sheet.getRange(i + 1, idx('subject') + 1).setValue(subject);
-      sheet.getRange(i + 1, idx('body') + 1).setValue(body);
+      sheet.getRange(i + 1, idx('subject') + 1).setValue(sheetSafeText_(subject));
+      sheet.getRange(i + 1, idx('body') + 1).setValue(sheetSafeText_(body));
       sheet.getRange(i + 1, idx('updated_at') + 1).setValue(now);
       invalidateTenantConfigCache_(tenantId);
       return { ok: true };
@@ -601,14 +601,14 @@ function setTenantSettingValueAdmin_(tenantId, key, value) {
   const keyIdx = header.indexOf('key'), valueIdx = header.indexOf('value');
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][keyIdx]) === key) {
-      sheet.getRange(i + 1, valueIdx + 1).setValue(value);
+      sheet.getRange(i + 1, valueIdx + 1).setValue(sheetSafeText_(value));
       invalidateTenantConfigCache_(tenantId);
       return { ok: true };
     }
   }
   const def = TENANT_SETTING_DEFS_.find(d => d.key === key);
   if (!def) return { ok: false, error: 'unknown_key' };
-  sheet.appendRow([key, value, def.description, def.editable]);
+  sheet.appendRow([key, sheetSafeText_(value), def.description, def.editable]);
   invalidateTenantConfigCache_(tenantId);
   return { ok: true };
 }

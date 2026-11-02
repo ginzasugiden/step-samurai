@@ -196,12 +196,14 @@ function loginWithPassword_(tenantId, password) {
   const data   = sheet.getDataRange().getValues();
   const header = data[0].map(String);
   const idx    = c => header.indexOf(c);
-  let ok = false;
+  let ok = false, found = false;
   for (let i = 1; i < data.length; i++) {
     const r = data[i];
     if (String(r[idx('tenant_id')]) !== tenantId || String(r[idx('kind')]) !== 'password' || r[idx('status')] !== 'active') continue;
+    found = true;
     if (hash_equals_(String(r[idx('token_hash')]), hashPassword_(tenantId, password, String(r[idx('salt')] || '')))) ok = true;
   }
+  if (!found) hashPassword_(tenantId, password, '');   // 存在しない tenant_id でも同量の計算を行い、応答時間の差を小さくする
   if (!ok) return null;
   // テナントが有効か（disabled はログイン不可）
   const t = listAllTenants_().find(x => x.tenant_id === tenantId);
@@ -216,6 +218,93 @@ function loginWithPassword_(tenantId, password) {
   row[idx('expires_at')] = Utilities.formatDate(exp, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
   sheet.appendRow(row);
   return { token: token, expires_at: row[idx('expires_at')], tenant_id: tenantId, shop_name: t.shop_name };
+}
+
+// ===== ログインの回数制限（tenant_id ごとに 15 分で 10 回失敗 → その tenant_id を 15 分拒否） =====
+//
+// - tenant_id は長さ・文字種を制限して正規化してからキーに使う（キー爆発対策）。形式外は共通の '_invalid' に集約する。
+// - 存在しない tenant_id も同じカウント・同じ応答（拒否時も通常の失敗と同じ 'unauthorized'）。存在有無が応答の差で分からない。
+//   存在しない tenant_id でも照合と同量の計算（ダミーのハッシュ計算）を行い、応答時間の差も小さくする。
+// - 成功したらその tenant_id のカウントを消す。制限中は正しいパスワードでも通さない（ロックアウト。15 分で自動解除）。
+// - 日別の失敗件数（tenant_id 別・件数のみ）は Script Properties LOGIN_FAIL__<日付> に積み、日次 checkLoginFailures_ が ADMIN_EMAIL へ通知する。
+const LOGIN_FAIL_LIMIT_ = 10;
+const LOGIN_FAIL_WINDOW_SEC_ = 900;
+const LOGIN_FAIL_PROP_PREFIX_ = 'LOGIN_FAIL__';
+const LOGIN_FAIL_MAX_TENANTS_ = 30;
+const LOGIN_TENANT_ID_RE_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
+
+/** 入力の tenant_id を正規化する。形式外は '_invalid'（共通バケット） */
+function normalizeLoginTenantId_(raw) {
+  const s = String(raw === undefined || raw === null ? '' : raw).trim().toLowerCase();
+  return LOGIN_TENANT_ID_RE_.test(s) ? s : '_invalid';
+}
+
+function isLoginBlocked_(key) {
+  try { return !!CacheService.getScriptCache().get('login_blk_' + key); } catch (e) { return false; }
+}
+
+function recordLoginFailure_(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = (Number(cache.get('login_cnt_' + key)) || 0) + 1;
+    cache.put('login_cnt_' + key, String(n), LOGIN_FAIL_WINDOW_SEC_);
+    if (n >= LOGIN_FAIL_LIMIT_) {
+      cache.put('login_blk_' + key, '1', LOGIN_FAIL_WINDOW_SEC_);
+      cache.remove('login_cnt_' + key);
+    }
+  } catch (e) { /* 制限の失敗でログイン自体は止めない */ }
+  try {   // 日別件数（件数のみ。入力値は正規化後の tenant_id だけ）
+    const props = PropertiesService.getScriptProperties();
+    const pk = LOGIN_FAIL_PROP_PREFIX_ + billingToday_();
+    let m = {};
+    try { m = JSON.parse(props.getProperty(pk) || '{}') || {}; } catch (e) { m = {}; }
+    const k = (m[key] !== undefined || Object.keys(m).length < LOGIN_FAIL_MAX_TENANTS_) ? key : '_other';
+    m[k] = (Number(m[k]) || 0) + 1;
+    props.setProperty(pk, JSON.stringify(m));
+  } catch (e) { /* 同上 */ }
+}
+
+function clearLoginFailures_(key) {
+  try { CacheService.getScriptCache().remove('login_cnt_' + key); } catch (e) { /* 無視 */ }
+}
+
+/** doPost action=login から呼ぶ。成功時 loginWithPassword_ と同じ戻り値、失敗・制限中は null（区別しない） */
+function loginAttempt_(rawTenantId, password) {
+  const key = normalizeLoginTenantId_(rawTenantId);
+  if (isLoginBlocked_(key)) return null;
+  const s = key === '_invalid' ? null : loginWithPassword_(key, String(password || ''));
+  if (s) { clearLoginFailures_(key); return s; }
+  if (key === '_invalid') hashPassword_('_invalid', String(password || ''), '');   // 応答時間を揃えるためのダミー計算
+  recordLoginFailure_(key);
+  return null;
+}
+
+/** 前日以前のログイン失敗件数を ADMIN_EMAIL へ通知する（checkBillingDaily から try/catch 付き）。本文は日付・tenant_id 別件数のみ */
+function checkLoginFailures_() {
+  const today = billingToday_();
+  const props = PropertiesService.getScriptProperties();
+  const adminEmail = props.getProperty('ADMIN_EMAIL');
+  const all = props.getProperties();
+  const done = [];
+  Object.keys(all).filter(k => k.indexOf(LOGIN_FAIL_PROP_PREFIX_) === 0).sort().forEach(k => {
+    const day = k.substring(LOGIN_FAIL_PROP_PREFIX_.length);
+    if (day >= today) return;
+    let m = {};
+    try { m = JSON.parse(all[k]) || {}; } catch (e) { m = {}; }
+    const ids = Object.keys(m).filter(id => id === '_invalid' || id === '_other' || LOGIN_TENANT_ID_RE_.test(id));
+    const total = ids.reduce((a, id) => a + (Number(m[id]) || 0), 0);
+    const body = [
+      `${day} に、ログイン失敗が合計 ${total} 件ありました。`,
+      ...ids.map(id => `  ${id}: ${Number(m[id]) || 0} 件`),
+      '',
+      `（同じ店舗ID で ${LOGIN_FAIL_WINDOW_SEC_ / 60} 分に ${LOGIN_FAIL_LIMIT_} 回失敗すると、その店舗ID を ${LOGIN_FAIL_WINDOW_SEC_ / 60} 分間ログイン不可にします）`,
+    ].join('\n');
+    if (!adminEmail) { Logger.log(`checkLoginFailures_: ADMIN_EMAIL 未設定のためメール送信せず。内容:\n${body}`); return; }
+    MailApp.sendEmail(adminEmail, `[step-samurai] ログイン失敗（${day}: ${total}件）`, body);
+    props.deleteProperty(k);
+    done.push(day);
+  });
+  return done;
 }
 
 function revokeSessions_(tenantId) {

@@ -164,7 +164,7 @@ function handleIngestReviews_(payload) {
       'review_type', 'product_title', 'rakuten_item_id', 'source', 'updated_at', 'deleted_at',
     ];
     const toRow = (rec, existingRow) => {
-      const row = existingRow ? existingRow.slice() : Array(hdr.length).fill('');
+      const row = existingRow ? existingRow.map(sheetSafeText_) : Array(hdr.length).fill('');   // 既存行の値は getValues で ' 無しの生文字列に戻るため、書き戻しでも無害化する（往復で数式が復活しない）
       while (row.length < hdr.length) row.push('');
       cols.forEach(c => {
         const i = hdr.indexOf(c);

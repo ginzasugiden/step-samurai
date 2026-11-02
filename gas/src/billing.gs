@@ -454,6 +454,7 @@ function checkBillingDaily() {
   try { checkHourlyHealth_(); } catch (e) { Logger.log(`checkBillingDaily hourly health error: ${e.message}`); consoleError_(`checkHourlyHealth_ failed: ${e.message}`); }
   try { checkPurgeReminders_(); } catch (e) { Logger.log(`checkBillingDaily purge reminder error: ${e.message}`); consoleError_(`checkPurgeReminders_ failed: ${e.message}`); }
   try { checkExtStale_(); } catch (e) { Logger.log(`checkBillingDaily ext stale error: ${e.message}`); consoleError_(`checkExtStale_ failed: ${e.message}`); }
+  try { checkLoginFailures_(); } catch (e) { Logger.log(`checkBillingDaily login failures error: ${e.message}`); consoleError_(`checkLoginFailures_ failed: ${e.message}`); }
   try { checkExtAuthFailures_(); } catch (e) { Logger.log(`checkBillingDaily ext auth failures error: ${e.message}`); consoleError_(`checkExtAuthFailures_ failed: ${e.message}`); }
   try { prunePipelineLog_(); } catch (e) { Logger.log(`checkBillingDaily prune error: ${e.message}`); consoleError_(`prunePipelineLog_ failed: ${e.message}`); }
   return flagged;

@@ -56,12 +56,18 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 - 店舗配布用 Chrome 拡張（`extension/`、v1.0.0）→ GAS `doPost action=ext_ingest_reviews`（ECOS は経由しない）。送るのは review_type / review_id(詳細URL) / rating / posted_at / order_number の5項目だけ。
 - 認証: 管理画面のテナント詳細「操作」タブで発行する専用トークン（`tenant_auth` の `kind='ext_review'`、ハッシュのみ保存、テナントにつき有効1つ）。`verifyTenantToken_` / `revokeTenantToken_` は ext_review を扱わない（管理画面 API には使えない）。
 - 受信: status が active/setup かつ課金OKのみ。`dry_run=true` は書かない。`review_ingest_enabled` は不要（ECOS 経路専用）。
-- 入力検証: `review_id` は `https://review.rakuten.co.jp/` 配下のみ。無効トークン（不明・失効・形式不正）が 600 秒で 30 回に達すると CacheService で一時的に `busy` 拒否（照合より前）。日別件数は Script Properties `EXT_AUTHFAIL__<日付>` に積み、日次 `checkExtAuthFailures_` が ADMIN_EMAIL へ件数のみ通知。外部由来の本文等は `sheetSafeText_`（先頭 = + - @ に `'` 付与）を通してから書く。
+- 入力検証: `review_id` は `https://review.rakuten.co.jp/` 配下のみ。トークン照合は有効/失効 ext_review のハッシュ一覧（平文なし）を CacheService に 60 秒載せて行い（ミス時のみシートを読む。発行・失効でキャッシュ破棄＝失効は即時）、無効トークン（不明・失効・形式不正）が 600 秒で 30 回に達すると 600 秒間 `busy` で拒否する。**照合に成功した正規トークンは制限中でも通る**（制限中の無効分は数え増さず `busy`）。日別件数は Script Properties `EXT_AUTHFAIL__<日付>` に積み、日次 `checkExtAuthFailures_` が ADMIN_EMAIL へ件数のみ通知。
 - 日次 `checkExtStale_`: active で受信実績があり最終受信から3日超のテナントを ADMIN_EMAIL へ通知（1日1回）。
 - 解約: 23日目のリマインドで purge と、続けて管理画面「最終削除」（`final_delete_tenant`）で PURGED_ シートと複製をゴミ箱へ移す（tenant_id 再入力）。
 - 配布 zip: `node tools/build-extension.js`（`dist/` は git 管理外）。ストア申請文書は `docs/store/`。規約は v1.1（`TERMS_VERSION` は `gas/src/onboarding.gs` と `webui/onboard.js` を同時に更新）。
 - 疎通確認用テナント（`gas/src/exttest.gs`）: GAS エディタで `setupExtTestTenant()` を実行すると tenant_id=`exttest`（status=setup・dry_run=true・認証情報なし・billing は manual/active）を作り、レビュー取込トークンを実行ログに**1回だけ**出す（2回目は再表示せず「既に存在」。再発行は管理画面で失効→再発行）。
 - 撤去は `teardownExtTestTenant()`（引数なし・exttest 固定）。トークン失効→disabled→purge→最終削除を一度に行う。拡張機能の試験は exttest のトークンで行い、終わったら必ず撤去する。
+
+### セキュリティ対策（2026-11-03〜）
+- 数式インジェクション: 店舗外の人・店舗が書ける文字列（レビュー本文・購入者名・設定値・テンプレート・マスター店舗情報など）は `sheetSafeText_`（`tenant.gs`。先頭が = + - @ tab CR なら `'` 付与、文字列のみ対象）を通してから書く。既存行の書き戻し（`toRow` / `buildOrderRow_`）も通す（getValues は `'` 無しで返るため）。新しい書き込み経路を足すときも同様。
+- login: tenant_id（正規化・形式外は共通バケット）ごとに 15 分で 10 回失敗 → 15 分拒否（`loginAttempt_`、CacheService）。存在しない tenant_id も同じ扱いで応答は常に `unauthorized`。失敗の日別件数は `LOGIN_FAIL__<日付>`、日次 `checkLoginFailures_` が ADMIN_EMAIL へ通知。正しいパスワードでも制限中は拒否（ロックアウト）。
+- 招待コード: 小文字16進40文字（約154bit）。形式外はシートを開く前に拒否。`onboard_check` / `onboard_submit` は無効コード 600 秒で 30 回 → 600 秒拒否（有効コードは通る）。
+- 乱数は `Utilities.getUuid()`（UUIDv4・122bit）を使う。ADMIN_TOKEN / REVIEW_INGEST_KEY は人が決める値なので十分長いランダム文字列（32文字以上）にすること。
 
 ### Drive スコープ（2026-10-25〜）
 - 最終削除（`purge.gs` の `setTrashed`）が権限不足で失敗していたため、`appsscript.json` に `oauthScopes` を明示し `drive` を追加（spreadsheets / script.external_request / script.send_mail / script.scriptapp も併記。明示すると自動検出が無効になるため、使用サービスを増やしたら必ず追記する。回帰テスト: `tests/admin_ui_tests.js`）。

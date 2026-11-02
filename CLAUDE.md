@@ -71,4 +71,4 @@ cd gas && clasp deploy -u ginzasugiden -i AKfycbwYsGkYmSfstE4Ay_mrvlZa1qHv5ImZe1
 
 ### Drive スコープ（2026-10-25〜）
 - 最終削除（`purge.gs` の `setTrashed`）が権限不足で失敗していたため、`appsscript.json` に `oauthScopes` を明示し `drive` を追加（spreadsheets / script.external_request / script.send_mail / script.scriptapp も併記。明示すると自動検出が無効になるため、使用サービスを増やしたら必ず追記する。回帰テスト: `tests/admin_ui_tests.js`）。
-- スコープ追加のため GAS エディタで ginzasugiden による再承認（権限を確認→許可）が必要だった。承認前は毎時トリガー（:42）が失敗しうる。デプロイは既存ID @21。
+- スコープ追加のため GAS エディタで ginzasugiden による再承認（権限を確認→許可）が必要だった。承認前は毎時トリガー（:42）が失敗しうる。デプロイは既存ID（@21 でスコープ追加。最新は @24＝セキュリティ第2弾、2026-11-03）。

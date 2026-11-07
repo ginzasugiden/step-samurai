@@ -554,3 +554,12 @@ function backupBeforeReviewTiers() {
 }
 
 function tierNowJst_() { return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'); }
+
+/** GAS エディタから実行する補助: tokyoflower の直近30日分を送らずに判定する（読み取りのみ）。レビュー1件ごとに1行出力 */
+function runDryRunTokyoflower() {
+  const out = dryRunReviewTiers('tokyoflower', 30);
+  const items = out.items || [];
+  console.log(JSON.stringify(Object.assign({}, out, { items: undefined, item_count: items.length }), null, 2));
+  items.forEach(it => console.log(JSON.stringify(it)));
+  return out;
+}

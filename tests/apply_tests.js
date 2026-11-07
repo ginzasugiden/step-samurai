@@ -43,7 +43,7 @@ vm.createContext(ctx);
 let pass = 0; const t = (n, f) => { try { f(); pass++; console.log('  ok  ' + n); } catch (e) { console.log('  FAIL ' + n + '\n       ' + e.message); process.exitCode = 1; } };
 const tabs = () => books.MASTER.sheets;
 const plain = o => JSON.parse(JSON.stringify(o));
-const good = o => Object.assign({ shop_name: '花屋おおさか', shop_url: 'https://www.rakuten.co.jp/hana/', contact_name: '山田', email: 'a@example.jp', monthly_orders: '30〜100件', follow_mail: '送っていない', rms_api: '利用中', browser: 'Chrome', expectation: '期待', case_publish: '匿名なら可', consent: true, website: '', turnstile_token: 'tok' }, o);
+const good = o => Object.assign({ shop_name: '花屋おおさか', shop_code: 'hana', contact_name: '山田', email: 'a@example.jp', monthly_orders: '30〜100件', follow_mail: '送っていない', rms_api: '利用中', browser: 'Chrome', expectation: '期待', case_publish: '匿名なら可', consent: true, website: '', turnstile_token: 'tok' }, o);
 const reset = () => { Object.keys(cacheStore).forEach(k => delete cacheStore[k]); fetchCalls = []; sent.length = 0; fetchResp = { success: true, hostname: 'step-samurai.ginzasugiden.com' }; };
 const tabsBefore = Object.keys(tabs()).sort().join(',');
 
@@ -66,15 +66,25 @@ t('success=false / hostname 違い / トークン無しは verify_failed（保�
 t('siteverify へは secret と response を POST する', () => { reset(); ctx.handleMonitorApply_(good({ email: 'v1@example.jp' })); const c = fetchCalls[0]; assert.equal(c.url, 'https://challenges.cloudflare.com/turnstile/v0/siteverify'); assert.equal(c.o.method, 'post'); assert.equal(c.o.payload.response, 'tok'); assert.equal(c.o.payload.secret, 'test-secret-not-real'); });
 
 console.log('入力検証');
-t('不正な入力は invalid と fields（保存なし）', () => { reset(); const before = Object.keys(tabs()).sort().join(','); const r = ctx.handleMonitorApply_(good({ email: 'x', shop_url: 'https://example.com/', consent: false, rms_api: 'zzz' })); assert.equal(r.error, 'invalid'); ['email', 'shop_url', 'consent', 'rms_api'].forEach(f => assert.ok(r.fields.includes(f), f)); assert.equal(Object.keys(tabs()).sort().join(','), before); });
-t('文字数の境界（店舗名100/101・担当者50/51・URL300/301・メール254/255・期待1000/1001）', () => {
+t('不正な入力は invalid と fields（保存なし）', () => { reset(); const before = Object.keys(tabs()).sort().join(','); const r = ctx.handleMonitorApply_(good({ email: 'x', shop_code: 'https://example.com/', consent: false, rms_api: 'zzz' })); assert.equal(r.error, 'invalid'); ['email', 'shop_url', 'consent', 'rms_api'].forEach(f => assert.ok(r.fields.includes(f), f)); assert.equal(Object.keys(tabs()).sort().join(','), before); });
+t('文字数の境界（店舗名100/101・担当者50/51・店舗コード64/65・メール254/255・期待1000/1001）', () => {
   const v = o => ctx.validateMonitorApply_(good(o)).ok;
   assert.equal(v({ shop_name: 'a'.repeat(100) }), true); assert.equal(v({ shop_name: 'a'.repeat(101) }), false);
   assert.equal(v({ contact_name: 'a'.repeat(50) }), true); assert.equal(v({ contact_name: 'a'.repeat(51) }), false);
-  const u = n => 'https://www.rakuten.co.jp/' + 'a'.repeat(n - 26); assert.equal(v({ shop_url: u(300) }), true); assert.equal(v({ shop_url: u(301) }), false);
+  assert.equal(v({ shop_code: 'a'.repeat(64) }), true); assert.equal(v({ shop_code: 'a'.repeat(65) }), false);
   const e = n => 'a'.repeat(n - 12) + '@example.com'; assert.equal(v({ email: e(254) }), true); assert.equal(v({ email: e(255) }), false);
   assert.equal(v({ expectation: 'a'.repeat(1000) }), true); assert.equal(v({ expectation: 'a'.repeat(1001) }), false); });
 t('任意項目は空でよい', () => { assert.equal(ctx.validateMonitorApply_(good({ browser: '', case_publish: '', expectation: '' })).ok, true); });
+
+console.log('店舗コード');
+const codeOf = v => { const r = ctx.validateMonitorApply_(good({ shop_code: v })); return r.ok ? r.clean.shop_url : null; };
+const TF = 'https://www.rakuten.co.jp/tokyoflower/';
+t('店舗コード・空白/大文字/末尾/・www/item のURL は同じ正規化URLになる', () => { ['tokyoflower', ' TokyoFlower/ ', 'https://www.rakuten.co.jp/tokyoflower/', 'https://item.rakuten.co.jp/tokyoflower/abc123/', 'https://www.rakuten.co.jp/TokyoFlower/?x=1'].forEach(v => assert.equal(codeOf(v), TF, v)); });
+t('他ドメイン・空白入り・../・空・65字は NG（fields に shop_url）', () => { ['https://evil.com/tokyoflower', 'tokyo flower', '../x', '', 'a'.repeat(65), 'http://www.rakuten.co.jp/x', 'https://www.rakuten.co.jp.evil.com/x'].forEach(v => { const r = ctx.validateMonitorApply_(good({ shop_code: v })); assert.equal(r.ok, false, v); assert.ok(r.fields.includes('shop_url'), v); }); });
+t('互換: shop_code が無く shop_url（URL）だけ来ても受け付ける', () => { const p = good(); delete p.shop_code; p.shop_url = 'https://www.rakuten.co.jp/hana/'; assert.equal(ctx.validateMonitorApply_(p).clean.shop_url, 'https://www.rakuten.co.jp/hana/'); });
+t('保存・通知は正規化後のURL（列構成は不変）', () => { reset(); const keep = tabs().applications; delete tabs().applications; ctx.handleMonitorApply_(good({ shop_code: ' TokyoFlower/ ', email: 'sc@example.jp' })); const rows = tabs().applications.rows; assert.equal(rows[0].length, 13); assert.equal(rows[0][2], 'shop_url'); assert.equal(rows[1][2], TF); assert.ok(sent[0].body.includes('店舗URL: ' + TF)); if (keep) tabs().applications = keep; });
+t('処理順: シークレット未設定＋トークンなし → not_ready（verify_failed にならない）', () => { reset(); const sec = props2.TURNSTILE_SECRET; delete props2.TURNSTILE_SECRET; try { assert.equal(ctx.handleMonitorApply_(good({ turnstile_token: '' })).error, 'not_ready'); assert.equal(fetchCalls.length, 0); } finally { props2.TURNSTILE_SECRET = sec; } });
+t('処理順: シークレットあり＋トークンなし → verify_failed（検証前に入力検証・保存へ進まない）', () => { reset(); const before = (tabs().applications || { rows: [] }).rows.length; assert.equal(ctx.handleMonitorApply_(good({ turnstile_token: '', shop_code: '!!' })).error, 'verify_failed'); assert.equal((tabs().applications || { rows: [] }).rows.length, before); });
 
 console.log('保存・通知・回数制限');
 t('成功: applications タブを作り、見出し＋1行（status=new）。運営宛てのみ通知（応募者へは送らない）', () => {

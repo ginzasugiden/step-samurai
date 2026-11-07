@@ -19,7 +19,8 @@ const MONITOR_OPTIONS_ = {
   browser: ['Chrome', 'その他'],           // 任意
   case_publish: ['可', '匿名なら可', '不可']   // 任意
 };
-const MONITOR_LIMITS_ = { shop_name: 100, shop_url: 300, contact_name: 50, email: 254, expectation: 1000 };
+const MONITOR_SHOP_CODE_RE_ = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const MONITOR_LIMITS_ = { shop_name: 100, contact_name: 50, email: 254, expectation: 1000 };
 
 /** 締切判定（JST 2026-11-24 23:59:59 を超えたら true） */
 function monitorApplyClosed_(nowMs) { return nowMs > MONITOR_APPLY_DEADLINE_MS_; }
@@ -30,14 +31,23 @@ function isMonitorApplyHoneypot_(p) { return String((p && p.website) || '').trim
 /** 1行項目の空白（改行・タブ含む）を畳む。メールの件名・本文への改行混入を防ぐ */
 function monitorOneLine_(v) { return String(v === undefined || v === null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim(); }
 
+/** 店舗コードの取り出し。楽天の店舗URL（www / item）なら /{code} 部分、そうでなければ入力そのまま。小文字化・前後空白と末尾 / を除去 */
+function extractMonitorShopCode_(v) {
+  const s = monitorOneLine_(v).toLowerCase();
+  const m = /^https:\/\/(?:www|item)\.rakuten\.co\.jp\/([^\/?#\s]+)/.exec(s);
+  if (m) return m[1];
+  return s.replace(/\/+$/, '').trim();
+}
+
 /** 入力検証。{ ok:true, clean } または { ok:false, fields:[不正な項目名] }。副作用なし */
 function validateMonitorApply_(p) {
   p = p || {};
   const bad = [];
   const clean = {};
   ['shop_name', 'contact_name'].forEach(k => { clean[k] = monitorOneLine_(p[k]); if (!clean[k] || clean[k].length > MONITOR_LIMITS_[k]) bad.push(k); });
-  clean.shop_url = monitorOneLine_(p.shop_url);
-  if (!/^https:\/\/(www|item)\.rakuten\.co\.jp\/[^\s]*$/.test(clean.shop_url) || clean.shop_url.length > MONITOR_LIMITS_.shop_url) bad.push('shop_url');
+  const code = extractMonitorShopCode_(p.shop_code !== undefined && p.shop_code !== '' ? p.shop_code : p.shop_url);   // 互換: shop_url（URL）が来ても受け付ける
+  clean.shop_url = MONITOR_SHOP_CODE_RE_.test(code) ? 'https://www.rakuten.co.jp/' + code + '/' : '';   // 保存・通知は正規化後のURL（列構成は変更しない）
+  if (!clean.shop_url) bad.push('shop_url');
   clean.email = monitorOneLine_(p.email);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean.email) || clean.email.length > MONITOR_LIMITS_.email) bad.push('email');
   ['monthly_orders', 'follow_mail', 'rms_api'].forEach(k => { clean[k] = monitorOneLine_(p[k]); if (MONITOR_OPTIONS_[k].indexOf(clean[k]) < 0) bad.push(k); });
@@ -127,15 +137,17 @@ function notifyMonitorApply_(c, rowNo) {
 
 /** GAS エディタから実行できる確認用（純粋関数のみ。Turnstile 通信・シート書き込み・メール送信はしない） */
 function testMonitorApplyValidation() {
-  const ok = { shop_name: '花屋', shop_url: 'https://www.rakuten.co.jp/hana/', contact_name: '山田', email: 'a@example.jp', monthly_orders: '30〜100件', follow_mail: '送っていない', rms_api: '利用中', consent: true };
+  const ok = { shop_name: '花屋', shop_code: 'hana', contact_name: '山田', email: 'a@example.jp', monthly_orders: '30〜100件', follow_mail: '送っていない', rms_api: '利用中', consent: true };
   const mod = o => validateMonitorApply_(Object.assign({}, ok, o));
   const bad = (o, f) => { const r = mod(o); return !r.ok && r.fields.indexOf(f) >= 0; };
   const cases = [
     ['正常な入力は通る', validateMonitorApply_(ok).ok === true],
     ['店舗名 空は NG', bad({ shop_name: '' }, 'shop_name')],
     ['店舗名 101字は NG・100字は通る', bad({ shop_name: 'あ'.repeat(101) }, 'shop_name') && mod({ shop_name: 'あ'.repeat(100) }).ok === true],
-    ['URL: item.rakuten.co.jp は通る', mod({ shop_url: 'https://item.rakuten.co.jp/x/y' }).ok === true],
-    ['URL: 他ドメイン・http・前方一致の偽装は NG', bad({ shop_url: 'https://example.com/' }, 'shop_url') && bad({ shop_url: 'http://www.rakuten.co.jp/x' }, 'shop_url') && bad({ shop_url: 'https://www.rakuten.co.jp.evil.com/' }, 'shop_url')],
+    ['店舗コード: tokyoflower → 正規化URL', mod({ shop_code: 'tokyoflower' }).clean.shop_url === 'https://www.rakuten.co.jp/tokyoflower/'],
+    ['店舗コード: 大文字・空白・末尾/ を整形', mod({ shop_code: ' TokyoFlower/ ' }).clean.shop_url === 'https://www.rakuten.co.jp/tokyoflower/'],
+    ['店舗コード: www / item のURLからも取り出す', mod({ shop_code: 'https://www.rakuten.co.jp/tokyoflower/' }).clean.shop_url === 'https://www.rakuten.co.jp/tokyoflower/' && mod({ shop_code: 'https://item.rakuten.co.jp/tokyoflower/abc123/' }).clean.shop_url === 'https://www.rakuten.co.jp/tokyoflower/'],
+    ['店舗コード: 他ドメイン・空白入り・../・空・65字は NG', bad({ shop_code: 'https://evil.com/tokyoflower' }, 'shop_url') && bad({ shop_code: 'tokyo flower' }, 'shop_url') && bad({ shop_code: '../x' }, 'shop_url') && bad({ shop_code: '' }, 'shop_url') && bad({ shop_code: 'a'.repeat(65) }, 'shop_url') && mod({ shop_code: 'a'.repeat(64) }).ok === true],
     ['メール形式 NG', bad({ email: 'abc' }, 'email')],
     ['選択肢は許可リストのみ', bad({ monthly_orders: '999件' }, 'monthly_orders') && bad({ follow_mail: 'x' }, 'follow_mail') && bad({ rms_api: '' }, 'rms_api')],
     ['任意の選択肢: 空は通る・不正値は NG', mod({ browser: '', case_publish: '' }).ok === true && bad({ browser: 'Edge' }, 'browser') && bad({ case_publish: 'x' }, 'case_publish')],

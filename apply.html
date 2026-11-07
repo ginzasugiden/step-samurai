@@ -64,6 +64,14 @@ button.btn { border:0; cursor:pointer; font-size:1rem; font-family:inherit; } bu
 .fnav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
 .fld > label.plain { font-weight:400; }
 .submit-row { margin-top:16px; }
+.codebox { display:flex; align-items:stretch; flex-wrap:wrap; gap:0; }
+.codebox .pre { background:#e9e7df; color:var(--muted); border:1px solid var(--line); border-right:0; border-radius:8px 0 0 8px; padding:.7rem .6rem; font-size:.95rem; white-space:nowrap; user-select:none; }
+.codebox input { flex:1 1 8em; min-width:0; border-radius:0 !important; }
+.codebox .suf { color:var(--muted); opacity:.6; padding:.7rem .5rem; border:1px solid var(--line); border-left:0; border-radius:0 8px 8px 0; background:var(--surface); }
+@media (prefers-color-scheme: dark) { .codebox .pre { background:#2a2c31; } }
+@media (max-width:520px) { .codebox .pre { flex:1 0 100%; border-right:1px solid var(--line); border-radius:8px 8px 0 0; white-space:normal; overflow-wrap:anywhere; } .codebox input { border-radius:0 0 0 8px !important; } .codebox .suf { border-radius:0 0 8px 0; } }
+.codenote { margin:6px 0 4px; }
+.fld.err .codebox input { border-color:var(--accent); }
 </style>
 </head>
 <body>
@@ -95,8 +103,10 @@ button.btn { border:0; cursor:pointer; font-size:1rem; font-family:inherit; } bu
       <p class="msg"></p>
     </div>
     <div class="fld" data-f="shop_url">
-      <label for="shop_url">店舗URL<span class="req">必須</span></label>
-      <input type="url" id="shop_url" name="shop_url" maxlength="300" autocomplete="off" placeholder="https://www.rakuten.co.jp/〇〇/" required>
+      <label for="shop_code">店舗URL<span class="req">必須</span></label>
+      <div class="codebox"><span class="pre">https://www.rakuten.co.jp/</span><input type="text" id="shop_code" name="shop_code" maxlength="300" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="tokyoflower" required><span class="suf">/</span></div>
+      <p class="note codenote">楽天の店舗トップURLの、co.jp/ の後ろの部分（店舗コード）だけを入力してください。例: https://www.rakuten.co.jp/tokyoflower/ → tokyoflower</p>
+      <p class="note" id="code-confirm">確認: <span id="code-confirm-body">（店舗コードを入力すると表示されます）</span></p>
       <p class="msg"></p>
     </div>
     <div class="fld" data-f="contact_name">

@@ -5,8 +5,8 @@
   var form = $('apply-form'), btn = $('submit-btn'), alertBox = $('form-alert');
   var token = '';
 
-  var LIMITS = { shop_name: 100, shop_url: 300, contact_name: 50, email: 254, expectation: 1000 };
-  var LABEL = { shop_name: '店舗名', shop_url: '店舗URL', contact_name: 'ご担当者名', email: 'メールアドレス', monthly_orders: '月の注文数の目安', follow_mail: '現在のフォローメール', rms_api: 'RMS WEB SERVICE（API）の利用状況', browser: '管理作業に使うブラウザ', expectation: '期待していること・困っていること', case_publish: '導入事例としての店舗名の掲載', consent: '同意' };
+  var LIMITS = { shop_name: 100, shop_code: 300, contact_name: 50, email: 254, expectation: 1000 };
+  var LABEL = { shop_name: '店舗名', shop_url: '店舗URL（店舗コード）', contact_name: 'ご担当者名', email: 'メールアドレス', monthly_orders: '月の注文数の目安', follow_mail: '現在のフォローメール', rms_api: 'RMS WEB SERVICE（API）の利用状況', browser: '管理作業に使うブラウザ', expectation: '期待していること・困っていること', case_publish: '導入事例としての店舗名の掲載', consent: '同意' };
 
   // 締切（JST の日付で判定。data-deadline の日の 23:59 まで受付）
   function jstToday() { var d = new Date(Date.now() + 9 * 3600e3); return d.toISOString().slice(0, 10); }
@@ -14,6 +14,26 @@
 
   window.onTurnstileOk = function (t) { token = t; btn.disabled = false; };
   window.onTurnstileGone = function () { token = ''; btn.disabled = true; };
+
+  // 店舗コードの取り出し（URL を丸ごと貼った場合も可）。サーバー（apply.gs）と同じ規則
+  function extractCode(v) {
+    var s = String(v || '').replace(/[\r\n\t]+/g, ' ').trim().toLowerCase();
+    var m = /^https:\/\/(?:www|item)\.rakuten\.co\.jp\/([^\/?#\s]+)/.exec(s);
+    if (m) return m[1];
+    return s.replace(/\/+$/, '').trim();
+  }
+  var CODE_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+  var codeEl = $('shop_code');
+  function showConfirm() {
+    var c = extractCode(codeEl.value), box = $('code-confirm-body');
+    if (!CODE_RE.test(c)) { box.textContent = '（店舗コードを入力すると表示されます）'; return; }
+    var url = 'https://www.rakuten.co.jp/' + c + '/';
+    box.textContent = '';
+    var a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = url;
+    box.appendChild(a);
+  }
+  codeEl.addEventListener('input', showConfirm);
+  codeEl.addEventListener('blur', function () { codeEl.value = extractCode(codeEl.value); showConfirm(); });
 
   function val(name) { var el = form.elements[name]; if (!el) return ''; if (el.type === 'checkbox') return el.checked; if (el.length !== undefined && !el.tagName) { for (var i = 0; i < el.length; i++) if (el[i].checked) return el[i].value; return ''; } return el.value.trim(); }
   function clearErrors() { alertBox.style.display = 'none'; form.querySelectorAll('.fld.err').forEach(function (f) { f.classList.remove('err'); }); }
@@ -26,8 +46,7 @@
   function check() {
     var bad = [];
     ['shop_name', 'contact_name'].forEach(function (k) { var v = val(k); if (!v) bad.push([k, LABEL[k] + 'を入力してください。']); else if (v.length > LIMITS[k]) bad.push([k, LABEL[k] + 'は' + LIMITS[k] + '字以内で入力してください。']); });
-    var u = val('shop_url');
-    if (!/^https:\/\/(www|item)\.rakuten\.co\.jp\/\S*$/.test(u) || u.length > LIMITS.shop_url) bad.push(['shop_url', '店舗URLは https://www.rakuten.co.jp/ または https://item.rakuten.co.jp/ から始まるURLを入力してください。']);
+    if (!CODE_RE.test(extractCode(codeEl.value))) bad.push(['shop_url', '店舗コードを入力してください（英小文字・数字・ - ・ _ のみ、64字以内。例: tokyoflower）。']);
     var e = val('email');
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) || e.length > LIMITS.email) bad.push(['email', 'メールアドレスの形式が正しくありません。']);
     ['monthly_orders', 'follow_mail', 'rms_api'].forEach(function (k) { if (!val(k)) bad.push([k, LABEL[k] + 'を選択してください。']); });
@@ -47,12 +66,13 @@
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
     clearErrors();
+    codeEl.value = extractCode(codeEl.value);
     var bad = check();
     if (bad.length) { bad.forEach(function (b) { mark(b[0], b[1]); }); showAlert('入力内容をご確認ください（' + bad.map(function (b) { return LABEL[b[0]]; }).join('、') + '）。'); return; }
     if (!token) { showAlert('確認（ロボット判定）が完了していません。'); return; }
     btn.disabled = true; btn.textContent = '送信中...';
     var payload = {
-      shop_name: val('shop_name'), shop_url: val('shop_url'), contact_name: val('contact_name'), email: val('email'),
+      shop_name: val('shop_name'), shop_code: extractCode(codeEl.value), contact_name: val('contact_name'), email: val('email'),
       monthly_orders: val('monthly_orders'), follow_mail: val('follow_mail'), rms_api: val('rms_api'), browser: val('browser'),
       expectation: val('expectation'), case_publish: val('case_publish'), consent: !!val('consent'),
       website: $('website').value, turnstile_token: token

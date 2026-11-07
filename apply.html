@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>モニター応募 — ステップ侍</title>
+<meta name="description" content="ステップ侍のモニター店舗（3店舗）の応募ページ。稼働開始から2か月無料。応募締切 2026年11月24日。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&text=STEPAMURI%20&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#fbfaf7; --surface:#ffffff; --text:#1d1f23; --muted:#5f6670; --line:#e4e1d8; --accent:#b3261e; --accent-ink:#ffffff; --ok:#1f7a4d; --soon:#8a6d00; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17181b; --surface:#212327; --text:#f0eee9; --muted:#a4a9b2; --line:#33363c; --accent:#e5584f; --accent-ink:#17181b; --ok:#5fc58f; --soon:#e0c25a; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; line-height:1.75; }
+.wrap { max-width:920px; margin:0 auto; padding:0 16px; }
+header.top { border-bottom:1px solid var(--line); }
+header.top .wrap { display:flex; align-items:center; justify-content:space-between; height:56px; }
+.brand { display:flex; align-items:baseline; gap:10px; text-decoration:none; color:var(--text); }
+.brand-en { font-family:"Bebas Neue", Impact, "Arial Narrow", sans-serif; font-size:1.9rem; letter-spacing:.08em; line-height:1; color:var(--accent); }
+.brand-ja { font-size:.8rem; font-weight:700; color:var(--muted); letter-spacing:.1em; }
+@media (max-width:420px){ .brand-en{font-size:1.6rem} }
+a { color:var(--accent); }
+.btn { display:inline-block; padding:.7rem 1.4rem; border-radius:8px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:700; }
+.btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+.hero { padding:56px 0 40px; }
+.hero h1 { font-size:clamp(1.7rem,5vw,2.6rem); line-height:1.3; margin:0 0 16px; }
+.hero p { color:var(--muted); max-width:36em; margin:0 0 24px; }
+.cta { display:flex; gap:12px; flex-wrap:wrap; }
+section { padding:32px 0; border-top:1px solid var(--line); }
+h2 { font-size:1.35rem; margin:0 0 16px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; }
+.card h3 { margin:0 0 8px; font-size:1.05rem; }
+.card p { margin:0; color:var(--muted); font-size:.95rem; }
+.tag { display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:99px; border:1px solid currentColor; margin-left:6px; vertical-align:middle; }
+.tag.soon { color:var(--soon); } .tag.ok { color:var(--ok); }
+.price { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; }
+.price .n { font-size:2rem; font-weight:800; }
+.price .l { color:var(--muted); font-size:.9rem; }
+.note { color:var(--muted); font-size:.85rem; }
+ol.steps { padding-left:1.2rem; } ol.steps li { margin-bottom:8px; }
+form.invite { display:flex; gap:8px; flex-wrap:wrap; }
+form.invite input { flex:1 1 260px; padding:.7rem .8rem; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:1rem; }
+footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--muted); font-size:.85rem; }
+
+.apply h1 { font-size:clamp(1.5rem,4.5vw,2.1rem); margin:32px 0 12px; line-height:1.3; }
+.apply .lead { color:var(--muted); margin:0 0 20px; }
+.conds { margin:0 0 20px; padding:16px 20px 16px 36px; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.conds li { margin:4px 0; }
+.note { color:var(--muted); font-size:.9rem; margin:0 0 12px; }
+.fld { margin:0 0 20px; border:0; padding:0; }
+.fld > label, .fld > legend { display:block; font-weight:700; margin:0 0 6px; padding:0; }
+.req { color:var(--accent); font-size:.8rem; margin-left:6px; } .opt { color:var(--muted); font-size:.8rem; font-weight:400; margin-left:6px; }
+.fld input[type=text], .fld input[type=url], .fld input[type=email], .fld textarea { width:100%; padding:.7rem .8rem; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:1rem; font-family:inherit; }
+.fld textarea { min-height:7em; resize:vertical; }
+.choices label { display:block; padding:.45rem 0; font-weight:400; }
+.fld.err input[type=text], .fld.err input[type=url], .fld.err input[type=email], .fld.err textarea { border-color:var(--accent); }
+.msg { display:none; color:var(--accent); font-size:.9rem; margin:6px 0 0; } .fld.err .msg { display:block; }
+.hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+button.btn { border:0; cursor:pointer; font-size:1rem; font-family:inherit; } button.btn:disabled { opacity:.5; cursor:not-allowed; }
+.alert { border:1px solid var(--accent); color:var(--accent); border-radius:8px; padding:12px 16px; margin:16px 0; display:none; }
+.done { padding:24px; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.fnav { display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:10px; }
+.fld > label.plain { font-weight:400; }
+.submit-row { margin-top:16px; }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./" aria-label="ステップ侍 トップ"><span class="brand-en">STEP SAMURAI</span><span class="brand-ja">ステップ侍</span></a>
+</div></header>
+
+<main class="apply">
+<div class="wrap">
+  <h1>モニター店舗 応募（11/24まで）</h1>
+  <p class="lead">楽天市場の店舗向けに、発送後のフォローメールとレビューお礼メールを自動送信するステップ侍の、モニター店舗を募集します。</p>
+  <ul class="conds">
+    <li>募集は3店舗です（選考のうえご連絡します）</li>
+    <li>稼働開始から2か月は無料です</li>
+    <li>期間後の継続は任意で、自動課金はありません。継続する場合は、正式料金の半年間半額です</li>
+    <li>クーポンの自動発行は準備中です</li>
+    <li>初期設定はオンライン30分で、一緒に進めます</li>
+  </ul>
+  <p class="note">店舗ID・APIキー・パスワードは、このフォームでは伺いません。入力内容はモニター選考とご連絡にのみ使用します（<a href="privacy.html">プライバシーポリシー</a>）。</p>
+
+  <div id="closed" class="done" hidden><strong>募集は終了しました。</strong></div>
+  <div id="thanks" class="done" hidden><strong>ご応募ありがとうございます。</strong><br>48時間以内に、ご入力のメールアドレスへご連絡します。</div>
+
+  <form id="apply-form" data-deadline="2026-11-24" novalidate>
+    <div id="form-alert" class="alert" role="alert"></div>
+    <div class="fld" data-f="shop_name">
+      <label for="shop_name">店舗名<span class="req">必須</span></label>
+      <input type="text" id="shop_name" name="shop_name" maxlength="100" autocomplete="off" required>
+      <p class="msg"></p>
+    </div>
+    <div class="fld" data-f="shop_url">
+      <label for="shop_url">店舗URL<span class="req">必須</span></label>
+      <input type="url" id="shop_url" name="shop_url" maxlength="300" autocomplete="off" placeholder="https://www.rakuten.co.jp/〇〇/" required>
+      <p class="msg"></p>
+    </div>
+    <div class="fld" data-f="contact_name">
+      <label for="contact_name">ご担当者名<span class="req">必須</span></label>
+      <input type="text" id="contact_name" name="contact_name" maxlength="50" autocomplete="off" required>
+      <p class="msg"></p>
+    </div>
+    <div class="fld" data-f="email">
+      <label for="email">メールアドレス<span class="req">必須</span></label>
+      <input type="email" id="email" name="email" maxlength="254" autocomplete="off" required>
+      <p class="msg"></p>
+    </div>
+    <fieldset class="fld" data-f="monthly_orders">
+      <legend>月の注文数の目安<span class="req">必須</span></legend>
+      <div class="choices">
+      <label><input type="radio" name="monthly_orders" value="30件未満" required> 30件未満</label>
+      <label><input type="radio" name="monthly_orders" value="30〜100件"> 30〜100件</label>
+      <label><input type="radio" name="monthly_orders" value="100〜300件"> 100〜300件</label>
+      <label><input type="radio" name="monthly_orders" value="300件以上"> 300件以上</label>
+    </div>
+      <p class="msg"></p>
+    </fieldset>
+    <fieldset class="fld" data-f="follow_mail">
+      <legend>現在のフォローメール<span class="req">必須</span></legend>
+      <div class="choices">
+      <label><input type="radio" name="follow_mail" value="送っていない" required> 送っていない</label>
+      <label><input type="radio" name="follow_mail" value="手動で送っている"> 手動で送っている</label>
+      <label><input type="radio" name="follow_mail" value="他のツールを利用"> 他のツールを利用</label>
+      <label><input type="radio" name="follow_mail" value="その他"> その他</label>
+    </div>
+      <p class="msg"></p>
+    </fieldset>
+    <fieldset class="fld" data-f="rms_api">
+      <legend>RMS WEB SERVICE（API）の利用状況<span class="req">必須</span></legend>
+      <div class="choices">
+      <label><input type="radio" name="rms_api" value="利用中" required> 利用中</label>
+      <label><input type="radio" name="rms_api" value="未申請"> 未申請</label>
+      <label><input type="radio" name="rms_api" value="わからない"> わからない</label>
+    </div>
+      <p class="msg"></p>
+    </fieldset>
+    <fieldset class="fld" data-f="browser">
+      <legend>管理作業に使うブラウザ<span class="opt">任意</span></legend>
+      <div class="choices">
+      <label><input type="radio" name="browser" value="Chrome"> Chrome</label>
+      <label><input type="radio" name="browser" value="その他"> その他</label>
+    </div>
+      <p class="msg"></p>
+    </fieldset>
+    <div class="fld" data-f="expectation">
+      <label for="expectation">期待していること・困っていること<span class="opt">任意</span></label>
+      <textarea id="expectation" name="expectation" maxlength="1000"></textarea>
+      <p class="msg"></p>
+    </div>
+    <fieldset class="fld" data-f="case_publish">
+      <legend>導入事例としての店舗名の掲載<span class="opt">任意</span></legend>
+      <div class="choices">
+      <label><input type="radio" name="case_publish" value="可"> 可</label>
+      <label><input type="radio" name="case_publish" value="匿名なら可"> 匿名なら可</label>
+      <label><input type="radio" name="case_publish" value="不可"> 不可</label>
+    </div>
+      <p class="msg"></p>
+    </fieldset>
+    <div class="fld" data-f="consent">
+      <label class="plain"><input type="checkbox" id="consent" name="consent"> 入力内容をモニター選考とご連絡に使用することに同意します<span class="req">必須</span></label>
+      <p class="msg"></p>
+    </div>
+    <div class="hp" aria-hidden="true"><label>website <input type="text" name="website" id="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="cf-turnstile" data-sitekey="0x4AAAAAAF3lWfg0jAxBNkQ1" data-callback="onTurnstileOk" data-expired-callback="onTurnstileGone" data-error-callback="onTurnstileGone"></div>
+    <p class="submit-row"><button class="btn" id="submit-btn" type="submit" disabled>応募する</button></p>
+  </form>
+</div>
+</main>
+
+<footer><div class="wrap">
+  <nav class="fnav">
+    <a href="terms.html">利用規約</a>
+    <a href="privacy.html">プライバシーポリシー</a>
+    <a href="company.html">運営者情報</a>
+    <a href="guide.html">ご利用開始ガイド</a>
+    <a href="mailto:ginzasugiden@gmail.com">お問い合わせ</a>
+    <a href="webui/index.html">店舗ログイン</a>
+  </nav>
+  ステップ侍 ／ 運営: 株式会社GSD
+</div></footer>
+
+<script src="webui/config.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="apply.js"></script>
+</body>
+</html>

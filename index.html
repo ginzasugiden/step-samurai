@@ -43,6 +43,9 @@ ol.steps { padding-left:1.2rem; } ol.steps li { margin-bottom:8px; }
 form.invite { display:flex; gap:8px; flex-wrap:wrap; }
 form.invite input { flex:1 1 260px; padding:.7rem .8rem; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:1rem; }
 footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--muted); font-size:.85rem; }
+.mbanner { display:block; margin:0 0 8px; padding:12px 16px; border-radius:10px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:700; text-align:center; }
+.mbanner[hidden] { display:none; }
+.mlist { margin:0 0 20px; padding-left:1.2em; } .mlist li { margin:4px 0; }
 </style>
 </head>
 <body>
@@ -57,6 +60,19 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
     <p>楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを、店舗名義で自動送信します。お客様のログイン情報はお預かりしません。</p>
     <div class="cta"><a class="btn" href="#apply">招待コードでお申し込み</a><a class="btn ghost" href="#features">機能を見る</a></div>
   </div>
+
+  <a class="mbanner" id="monitor-banner" href="#monitor" data-deadline="2026-11-24">モニター店舗募集中（11/24まで）</a>
+
+  <section id="monitor" data-deadline="2026-11-24">
+    <h2>モニター店舗募集（3店舗）</h2>
+    <ul class="mlist">
+      <li>稼働開始から2か月は無料です</li>
+      <li>期間後の継続は任意で、自動課金はありません。継続する場合は、正式料金の半年間半額です</li>
+      <li>初期設定はオンライン30分で、一緒に進めます</li>
+      <li>応募締切は11月24日です（選考のうえご連絡します）</li>
+    </ul>
+    <a class="btn" id="monitor-btn" href="apply.html">応募する（2分）</a>
+  </section>
 
   <section id="features">
     <h2>機能</h2>
@@ -110,6 +126,7 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
     <a href="guide.html">ご利用開始ガイド</a>
     <a href="mailto:ginzasugiden@gmail.com">お問い合わせ</a>
     <a href="webui/index.html">店舗ログイン</a>
+    <a href="apply.html">モニター応募</a>
   </nav>
   ステップ侍 ／ 運営: 株式会社GSD
 </div></footer>
@@ -120,6 +137,17 @@ document.getElementById('invite-form').addEventListener('submit', function (e) {
   var code = document.getElementById('invite').value.trim();
   location.href = 'webui/onboard.html' + (code ? '#invite=' + encodeURIComponent(code) : '');
 });
+</script>
+<script>
+// モニター募集の締切（JST の日付。data-deadline の日の終わりまで）
+(function () {
+  var sec = document.getElementById('monitor');
+  var today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  if (today > sec.getAttribute('data-deadline')) {
+    var b = document.getElementById('monitor-btn'); b.textContent = '募集は終了しました'; b.removeAttribute('href'); b.className = 'btn ghost';
+    document.getElementById('monitor-banner').hidden = true;
+  }
+})();
 </script>
 </body>
 </html>

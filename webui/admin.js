@@ -106,11 +106,12 @@ $('create-btn').addEventListener('click', async () => {
 
 $('invite-btn').addEventListener('click', async () => {
   const p = { tenant_id: $('new-id').value.trim(), shop_name: $('new-name').value.trim(), shop_email: $('new-email').value.trim(), cc_email: $('new-cc').value.trim() };
-  if (!confirm(`テナント「${p.tenant_id}」を作成（未作成なら）して招待コードを発行します。`)) return;
+  if ($('new-monitor').checked) p.plan = 'monitor';
+  if (!confirm(`テナント「${p.tenant_id}」を作成（未作成なら）して招待コードを発行します。${p.plan === 'monitor' ? '\n無料期間: 60日（モニター）' : ''}`)) return;
   $('invite-btn').disabled = true;
   try {
     const r = await callApi('create_invite', p);
-    if (r.ok) show('create-result', `招待コード（一度しか表示されません）:\n${r.invite}\n有効期限: ${r.expires_at}\n\n店舗へ渡すURL（コードを含む）:\n${r.onboard_url}#invite=${r.invite}\n\n※ URL はフラグメント(#)で渡すためサーバのログには残りません。メール本文に直接書かず、安全な経路で渡してください。`);
+    if (r.ok) show('create-result', `招待コード（一度しか表示されません）:\n${r.invite}\n有効期限: ${r.expires_at}\n無料期間: ${r.plan === 'monitor' ? '60日（モニター）' : '30日'}\n\n店舗へ渡すURL（コードを含む）:\n${r.onboard_url}#invite=${r.invite}\n\n※ URL はフラグメント(#)で渡すためサーバのログには残りません。メール本文に直接書かず、安全な経路で渡してください。`);
     else show('create-result', r);
     await reloadTenants();
   } catch (e) { show('create-result', '通信エラー: ' + e.message); } finally { $('invite-btn').disabled = false; }
@@ -247,6 +248,7 @@ op('status-btn', 'set_tenant_status', 'status-result', () => ({ status: $('statu
 op('bill-btn', 'set_billing', 'bill-result', () => ({ billing_status: $('bill-status').value, billing_provider: $('bill-provider').value, billing_note: $('bill-note').value.trim(),
   freee_invoiced: $('bill-freee').checked, freee_date: $('bill-freee-date').value, freee_invoice_no: $('bill-freee-no').value.trim() }), '課金情報を更新します。past_due / canceled にすると、この店舗の送信・クーポン発行が止まります。');
 $('bill-btn').addEventListener('click', () => setTimeout(reloadTenants, 1500));
+op('monitor-btn', 'set_billing', 'monitor-result', () => ({ make_monitor: true }), 'この店舗をモニター（無料60日）に切り替えます。無料期間中の店舗だけが対象で、起算済みなら無料期間の終了日が起算日+60日に延長されます（短縮はしません）。よろしいですか？');
 op('bridge-btn', 'bridge_config_hint', 'bridge-result');
 op('set-cred-btn', 'set_credentials', 'cred-result', () => ({ service_secret: $('set-secret').value.trim(), license_key: $('set-license').value.trim(), license_expiry: $('set-expiry').value }), 'RMS へ接続テストを行い、成功した場合のみ暗号化保存します。');
 op('set-smtp-btn', 'set_smtp', 'cred-result', () => ({ smtp_user: $('set-smtp-user').value.trim(), smtp_pass: $('set-smtp-pass').value }));

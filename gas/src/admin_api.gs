@@ -149,7 +149,7 @@ function adminCreateTenant_(p) {
   if (!shopName) return { ok: false, error: 'shop_name_required' };
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(shopEmail)) return { ok: false, error: 'invalid_shop_email' };
   if (listAllTenants_().some(t => t.tenant_id === tenantId)) return { ok: false, error: 'tenant_exists' };
-  const spreadsheetId = createTenant(shopName, tenantId, shopEmail, ccEmail);
+  const spreadsheetId = createTenant(shopName, tenantId, shopEmail, ccEmail, p.plan === 'monitor' ? 'monitor' : 'standard');
   return { ok: true, tenant_id: tenantId, spreadsheet_id: spreadsheetId, status: 'setup' };
 }
 
@@ -270,11 +270,17 @@ function adminSystemStatus_() {
 function adminCreateInvite_(p) {
   const tenantId = String(p.tenant_id || '').trim();
   if (!TENANT_ID_PATTERN_.test(tenantId)) return { ok: false, error: 'invalid_tenant_id' };
+  const wantMonitor = p.plan === 'monitor';   // それ以外の値は無視（standard 扱い）
+  let monitor = null;
   if (!listAllTenants_().some(t => t.tenant_id === tenantId)) {
     const r = adminCreateTenant_(p);
     if (!r.ok) return r;
+  } else if (wantMonitor) {
+    monitor = makeMonitor_(tenantId);   // 既存テナントへの再発行: set_billing make_monitor と同じ処理
+    if (!monitor.ok) return monitor;
   }
   const inv = createInvite_(tenantId);
-  return { ok: true, tenant_id: tenantId, invite: inv.invite, expires_at: inv.expires_at,
+  const b = readBillingRow_(tenantId);
+  return { ok: true, tenant_id: tenantId, plan: (b && b.plan) || 'standard', invite: inv.invite, expires_at: inv.expires_at,
            onboard_url: 'https://step-samurai.ginzasugiden.com/webui/onboard.html' };
 }

@@ -30,6 +30,8 @@ const GLOBAL_SETTING_DEFS_ = [
   { key: 'fincode_payment_url', value: '',    description: 'fincode 決済リンク（審査完了後に設定。空なら請求書払い案内）' },
 ];
 const TRIAL_DAYS_MAX_ = 30;
+const MONITOR_TRIAL_DAYS_ = 60;               // モニター店舗（plan=monitor）の無料期間
+const BILLING_PLANS_ = ['standard', 'monitor'];   // 指定可能な plan（既存値の exttest 等は読み取り時に許容。検証は monitor 指定時のみ）
 
 function billingNowStr_() { return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'); }
 function billingToday_()  { return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'); }
@@ -89,6 +91,11 @@ function getTrialDays_() {
   const n = Number(getGlobalSetting_('trial_days', '30'));
   if (isNaN(n) || n < 0) return TRIAL_DAYS_MAX_;
   return Math.min(Math.floor(n), TRIAL_DAYS_MAX_);
+}
+
+/** plan ごとの無料期間日数。monitor は60日、それ以外（空含む）は trial_days 設定（上限30） */
+function getTrialDaysForPlan_(plan) {
+  return String(plan || '') === 'monitor' ? MONITOR_TRIAL_DAYS_ : getTrialDays_();
 }
 
 function addDaysStr_(dateStr, days) {
@@ -330,10 +337,11 @@ function prunePipelineLog_() {
 // ===== テナント作成時 / 手動切替 =====
 
 /** テナント作成時: trial 待機（期間は未設定）。起算は申込完了時の startTrialIfPending_ で行う */
-function initPendingTrialBilling_(tenantId) {
+function initPendingTrialBilling_(tenantId, plan) {
   ensureBillingSchema_();
-  writeBillingFields_(tenantId, { plan: 'standard', billing_provider: 'manual', billing_status: 'trial', trial_start: '', trial_end: '' });
-  appendBillingEvent_(tenantId, 'system', 'tenant_created', '', 'trial', 'trial 起算は申込完了時');
+  const pl = plan === 'monitor' ? 'monitor' : 'standard';
+  writeBillingFields_(tenantId, { plan: pl, billing_provider: 'manual', billing_status: 'trial', trial_start: '', trial_end: '' });
+  appendBillingEvent_(tenantId, 'system', 'tenant_created', '', 'trial', `trial 起算は申込完了時;plan=${pl}`);
   return { trial_start: '', trial_end: '' };
 }
 
@@ -351,16 +359,44 @@ function startTrialIfPending_(tenantId) {
 /** trial を起算する（今日〜今日+trial_days）。通常は startTrialIfPending_ 経由で使う */
 function initTrialBilling_(tenantId) {
   ensureBillingSchema_();
-  const today = billingToday_(), end = addDaysStr_(today, getTrialDays_());
-  writeBillingFields_(tenantId, { plan: 'standard', billing_provider: 'manual', billing_status: 'trial', trial_start: today, trial_end: end });
-  appendBillingEvent_(tenantId, 'system', 'trial_start', '', 'trial', `trial_end=${end}`);
+  const cur = readBillingRow_(tenantId);
+  const plan = (cur && cur.plan) || 'standard';   // 既存の plan を保持（空なら standard）
+  const days = getTrialDaysForPlan_(plan);
+  const today = billingToday_(), end = addDaysStr_(today, days);
+  writeBillingFields_(tenantId, { plan: plan, billing_provider: 'manual', billing_status: 'trial', trial_start: today, trial_end: end });
+  appendBillingEvent_(tenantId, 'system', 'trial_start', '', 'trial', `trial_end=${end};plan=${plan};days=${days}`);
   return { trial_start: today, trial_end: end };
+}
+
+/**
+ * 店舗をモニター（plan=monitor・無料60日）にする。trial 中の店舗だけ。
+ * 起算前: plan のみ変更（起算時に60日）。起算済み: trial_end を trial_start+60日へ延長（短縮はしない）。
+ * active / past_due / canceled には適用しない（not_in_trial）。billing_events に monitor_set を残す。
+ */
+function makeMonitor_(tenantId) {
+  const cur = readBillingRow_(tenantId);
+  if (!cur) return { ok: false, error: 'billing_columns_missing' };
+  if (cur.billing_status !== 'trial') return { ok: false, error: 'not_in_trial' };
+  const fields = { plan: 'monitor' };
+  const before = cur.trial_end;
+  let after = before;
+  if (cur.trial_start) {
+    const target = addDaysStr_(cur.trial_start, MONITOR_TRIAL_DAYS_);
+    if (!before || target > before) { fields.trial_end = target; after = target; }
+  }
+  if (cur.plan === 'monitor' && after === before) return { ok: true, unchanged: true, plan: 'monitor', trial_end: before, billing: cur };
+  writeBillingFields_(tenantId, fields);
+  appendBillingEvent_(tenantId, 'manual', 'monitor_set', cur.billing_status, 'trial', `plan:${cur.plan || ''}->monitor;trial_end:${before || '(未起算)'}->${after || '(未起算)'}`);
+  return { ok: true, plan: 'monitor', trial_end: after, billing: readBillingRow_(tenantId) };
 }
 
 /** 管理者の手動切替（manual 運用）。billing_events に手動記録 */
 function adminSetBilling_(tenantId, p) {
   const cur = readBillingRow_(tenantId);
   if (!cur) return { ok: false, error: 'billing_columns_missing' };
+  if (p.make_monitor === true) {   // モニターへ切替（trial 中のみ）。他の更新項目と同時指定は不可
+    return makeMonitor_(tenantId);
+  }
   if (p.start_trial) {   // 運営がセルフ登録を経ずに認証情報を入れた店舗などの trial を、今日から起算する（起算済みなら何もしない）
     const s = startTrialIfPending_(tenantId);
     if (!s.started && !p.billing_status && !p.billing_provider && !p.billing_note && !p.freee_invoiced) return { ok: true, started: false, billing: readBillingRow_(tenantId) };

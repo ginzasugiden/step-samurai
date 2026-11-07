@@ -52,6 +52,7 @@
         <label>店舗メール（差出人） <input id="new-email" type="text" placeholder="RMSに登録の店舗連絡先メール"></label>
         <label>控えメール（任意） <input id="new-cc" type="text"></label>
       </div>
+      <label class="hint"><input id="new-monitor" type="checkbox"> モニター（無料60日）</label><br>
       <button id="create-btn">作成のみ</button> <button id="invite-btn">作成して招待コードを発行</button>
       <p class="hint">「招待コード」を店舗へ渡すと、店舗が <code>onboard.html</code> から自分で RMS キー・SMTP を登録します（暗号化保管・運営者には非表示）。有効期限7日・一回限り。</p>
       <pre id="create-result" class="result-box" hidden></pre>
@@ -129,6 +130,8 @@
             <label class="hint"><input id="bill-freee" type="checkbox"> freeeで請求済（日付と請求書番号をメモに残すだけ・freee連携なし）</label>
             <input id="bill-freee-date" type="date"> <input id="bill-freee-no" type="text" placeholder="freee 請求書番号" autocomplete="off">
             <button id="bill-btn">課金情報を更新</button>
+            <button id="monitor-btn" class="secondary">モニターに切り替え（無料60日）</button>
+            <pre id="monitor-result" class="result-box" hidden></pre>
             <pre id="bill-result" class="result-box" hidden></pre>
             <p class="hint">変更は billing_events に手動記録されます。past_due / canceled / trial期限切れ / 未設定のテナントは、毎時パイプライン・お礼メール・クーポン発行がスキップされます。</p></div>
           <div><h3>SMTPブリッジ設定</h3><button id="bridge-btn" class="secondary">config.php 追記内容を表示</button><pre id="bridge-result" class="result-box" hidden></pre></div>

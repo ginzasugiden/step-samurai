@@ -15,3 +15,6 @@ function testMonitorTrialDays_() {
   Logger.log(ng ? `NG ${ng}件` : '全項目 OK');
   if (ng) throw new Error(`testMonitorTrialDays_: NG ${ng}件`);
 }
+
+/** GAS エディタの実行メニューには末尾 _ の関数が出ないため、エディタから実行する用の公開ラッパー */
+function testMonitorTrialDays() { return testMonitorTrialDays_(); }

@@ -24,3 +24,9 @@ GAS エディタで `restoreSettingsFromHistory(tenantId, historyRowId)` を実�
 1. ストアのデベロッパーダッシュボード → 「ステップ侍 レビュー取込」（ID: nhokckohpjajdnijfodpaimecfghlfch）→ パッケージ。
 2. 問題があれば、公開前なら審査中の v1.1.0 を取り下げる。公開済みなら `dist/step-samurai-review-ext-1.0.0.zip`（v1.0.0 と同一内容）を **version を 1.1.1 以上に上げた manifest で** 再アップロードする（ストアは version の巻き戻しを受け付けない）。具体的には `extension/` を `git checkout backup/pre-review-tiers-20261108 -- extension` で戻し、`manifest.json` の version だけ上げて `node tools/build-extension.js`。
 3. GAS 側は v1.0.0 の拡張とも互換（状態報告 `ext_report_status` を送らない拡張は従来どおり動く）。
+
+## 5. 例外コードの削除予定
+- 対象: `gas/src/review_tiers.gs` の `LEGACY_REVIEW_THANKS_TENANTS_`（tokyoflower の暫定例外）、`isLegacyReviewThanksTenant_`、`gas/src/review_thanks.gs` の `mode = 'legacy'` 分岐。
+- 時期: `migrateTokyoflowerTiers()` を実行した日の **7日後**（H2 の実行日を控えて、その7日後）。それまでは消さない。
+- 例外は「段階設定が未保存の時だけ」効く（段階設定が保存済みなら必ず段階方式。テストで固定済み）。
+- 削除後は、段階設定が未保存の店舗はすべて fail-closed（送信しない）になる。

@@ -110,4 +110,12 @@ t('sendCouponMail の recordType オプション（coupon_test）', () => {
 });
 t('TEST_MAIL_TO が空なら宛先は差し替えられない', () => assert.equal(ctx.resolveRecipient_('x@pc.fw.rakuten.ne.jp'), 'x@pc.fw.rakuten.ne.jp'));
 
+t('tokyoflower の暫定例外は段階設定が無い時だけ: 保存済みなら新方式（min_rating は無視）、空に戻せば従来方式', () => {
+  clearCache(); assert.equal(ctx.collectPendingReviewThanks_('tokyoflower').mode, 'legacy');
+  [['review_tier_count','1'],['tier1_enabled','true'],['tier1_subject','件名'],['tier1_body','本文']].forEach(kv => ctx.setTenantSettingValueAdmin_('tokyoflower', kv[0], kv[1])); clearCache();
+  assert.equal(ctx.collectPendingReviewThanks_('tokyoflower').mode, 'tiers');
+  ctx.setTenantSettingValueAdmin_('tokyoflower', 'review_tier_count', ''); clearCache();
+  assert.equal(ctx.collectPendingReviewThanks_('tokyoflower').mode, 'legacy');
+});
+
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ステップ侍 — 楽天店舗のフォローメール自動化</title>
 <meta name="description" content="楽天市場の受注データをもとに、発送後のフォローメールとレビューお礼メールを自動で送る。月額9,800円（税別）・初期費用0円・30日間無料。運営: 株式会社GSD。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&text=STEPAMURI%20&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#fbfaf7; --surface:#ffffff; --text:#1d1f23; --muted:#5f6670; --line:#e4e1d8; --accent:#b3261e; --accent-ink:#ffffff; --ok:#1f7a4d; --soon:#8a6d00; }
 @media (prefers-color-scheme: dark) { :root { --bg:#17181b; --surface:#212327; --text:#f0eee9; --muted:#a4a9b2; --line:#33363c; --accent:#e5584f; --accent-ink:#17181b; --ok:#5fc58f; --soon:#e0c25a; } }
@@ -13,7 +16,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .wrap { max-width:920px; margin:0 auto; padding:0 16px; }
 header.top { border-bottom:1px solid var(--line); }
 header.top .wrap { display:flex; align-items:center; justify-content:space-between; height:56px; }
-.brand { font-weight:700; letter-spacing:.04em; }
+.brand { display:flex; align-items:baseline; gap:10px; text-decoration:none; color:var(--text); }
+.brand-en { font-family:"Bebas Neue", Impact, "Arial Narrow", sans-serif; font-size:1.9rem; letter-spacing:.08em; line-height:1; color:var(--accent); }
+.brand-ja { font-size:.8rem; font-weight:700; color:var(--muted); letter-spacing:.1em; }
+@media (max-width:420px){ .brand-en{font-size:1.6rem} }
 a { color:var(--accent); }
 .btn { display:inline-block; padding:.7rem 1.4rem; border-radius:8px; background:var(--accent); color:var(--accent-ink); text-decoration:none; font-weight:700; }
 .btn.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
@@ -41,8 +47,7 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <span class="brand">ステップ侍</span>
-  <nav><a href="webui/admin.html" style="margin-right:16px">運営ログイン</a><a href="webui/index.html">店舗ログイン</a></nav>
+  <a class="brand" href="./" aria-label="ステップ侍 トップ"><span class="brand-en">STEP SAMURAI</span><span class="brand-ja">ステップ侍</span></a>
 </div></header>
 
 <main>
@@ -104,8 +109,9 @@ footer { border-top:1px solid var(--line); padding:24px 0 40px; color:var(--mute
     <a href="company.html">運営者情報</a>
     <a href="guide.html">ご利用開始ガイド</a>
     <a href="mailto:ginzasugiden@gmail.com">お問い合わせ</a>
+    <a href="webui/index.html">店舗ログイン</a>
   </nav>
-  ステップ侍 ／ 運営: 株式会社GSD　<a href="webui/admin.html">運営ログイン</a>
+  ステップ侍 ／ 運営: 株式会社GSD
 </div></footer>
 
 <script>

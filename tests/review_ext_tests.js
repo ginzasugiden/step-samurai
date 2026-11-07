@@ -64,7 +64,7 @@ const ctx = { PropertiesService, Utilities, Logger, SpreadsheetApp, LockService,
   CacheService: { getScriptCache: () => ({ get: k => (cacheStore[k] === undefined ? null : cacheStore[k]), put: (k, v) => { if (k.indexOf('ext_auth_fail') === 0) cacheStore[k] = v; }, remove: k => { delete cacheStore[k]; } }) },   // 無効トークン制限のキーだけ保持（他のキャッシュは従来どおり効かせない）
   Date: class extends Date { constructor(...a) { super(...(a.length ? a : [fakeNow.getTime()])); } static now() { return fakeNow.getTime(); } } };
 vm.createContext(ctx);
-['crypto_store.gs', 'auth.gs', 'tenant.gs', 'config.gs', 'billing.gs', 'onboarding.gs', 'admin_api.gs', 'purge.gs', 'analytics_backfill.gs', 'mailer.gs', 'reviews_import.gs', 'reviews_ingest.gs', 'reviews_ext.gs', 'review_thanks.gs', 'webapp.gs']
+['crypto_store.gs', 'auth.gs', 'tenant.gs', 'config.gs', 'billing.gs', 'onboarding.gs', 'admin_api.gs', 'purge.gs', 'analytics_backfill.gs', 'mailer.gs', 'reviews_import.gs', 'reviews_ingest.gs', 'reviews_ext.gs', 'review_thanks.gs', 'review_tiers.gs', 'webapp.gs']
   .forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 const rapi = load('rakuten_api.gs'); const li = rapi.indexOf('function linkOrdersReviews('); vm.runInContext(rapi.substring(li, rapi.indexOf('\n}\n', li) + 3), ctx);
 vm.runInContext('function jsonResponse_(o) { return o; }', ctx);
@@ -379,6 +379,7 @@ t('テンプレート変数は buyer_name/shop_name/ship_date/shop_signature/rev
 t('ext 取込（body/product_title が空）のレビューが collectReviewsByOrder_ / collectPendingReviewThanks_ の対象になる', () => {
   books.SS_A.sheets.reviews = new Sheet([REV7]);
   setSetting('SS_A', 'review_thanks_since', '2026-09-01'); setSetting('SS_A', 'review_thanks_min_rating', '3');
+  setSetting('SS_A', 'review_tier_count', '2'); setSetting('SS_A', 'review_tier_b1', '3'); setSetting('SS_A', 'tier1_enabled', 'true'); setSetting('SS_A', 'tier1_subject', 'お礼'); setSetting('SS_A', 'tier1_body', '本文');
   const r = call(TA, [good(1, { order_number: '111111-20260901-0000000001', posted_at: '2026/9/10 9:05:03' })]); assert.equal(r.inserted, 1);
   const sh = books.SS_A.sheets.reviews; const h = c => sh.rows[0].indexOf(c); assert.equal(sh.rows[1][h('body')], ''); assert.equal(sh.rows[1][h('product_title')], '');
   const m = ctx.collectReviewsByOrder_('shopa'); assert.ok(m['111111-20260901-0000000001']); assert.equal(m['111111-20260901-0000000001'].rating, 5);
@@ -386,7 +387,7 @@ t('ext 取込（body/product_title が空）のレビューが collectReviewsByO
 });
 t('低評価(<3)は ext 経由でも従来どおり対象外', () => {
   call(TA, [good(1, { order_number: '111111-20260901-0000000001', rating: 2, posted_at: '2026/9/10 9:05:03' })]);
-  const p = ctx.collectPendingReviewThanks_('shopa'); assert.equal(p.targets.length, 0); assert.deepEqual(p.skipped.low_rating, ['111111-20260901-0000000001']);
+  const p = ctx.collectPendingReviewThanks_('shopa'); assert.equal(p.targets.length, 0); assert.deepEqual(p.skipped.tier_disabled, ['111111-20260901-0000000001']);
 });
 
 console.log(`\n${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

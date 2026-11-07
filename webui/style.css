@@ -253,3 +253,11 @@ details.sub input { display: block; width: 100%; margin: 0.3rem 0; }
 
 details.adv { margin: 0.5rem 0 1rem; font-size: 0.85rem; }
 details.adv summary { cursor: pointer; color: var(--text-muted); }
+
+/* すべての店舗画面の最上部に出る赤い帯（storecommon.js） */
+.ss-sync-banner { position: sticky; top: 0; z-index: 900; background: #c0392b; color: #fff; padding: 0.6rem 1rem; font-size: 0.9rem; line-height: 1.5; }
+.ss-sync-banner a { color: #fff; text-decoration: underline; font-weight: 600; }
+.ss-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.ss-modal-box { background: #fff; border-radius: var(--radius); padding: 1.2rem 1.4rem; max-width: 34rem; width: 100%; max-height: 90vh; overflow: auto; }
+
+.link-btn { display: inline-block; margin-right: 0.5rem; color: var(--accent); text-decoration: none; font-size: 0.9rem; }

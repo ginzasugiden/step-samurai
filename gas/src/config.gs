@@ -63,7 +63,7 @@ function isOnOrAfterGoLiveDate_(shipDate, goLiveDateStr) {
 const KNOWN_TEMPLATE_PLACEHOLDERS_ = [
   'buyer_name', 'shop_name', 'ship_date', 'discount',
   'coupon_valid_until', 'coupon_get_url', 'shop_signature',
-  'review_url',
+  'review_url', 'rating', 'coupon_url',
 ];
 
 /**
@@ -168,6 +168,12 @@ function setTenantSettingValue_(tenantId, key, value) {
  * mailer.gs sendPendingMails / coupon_engine.gs evaluateCoupons の両方がこの関数を共通参照する。
  */
 function getFollowDaysAfterShip_(tenantId) {
+  // 店舗設定画面の follow_delay_days（整数1〜30）を優先。無ければ従来の follow_days_after_ship（0以上）を引き継ぐ
+  const nv = getTenantSettingValue_(tenantId, 'follow_delay_days');
+  if (nv !== null && nv !== '') {
+    const m = Number(nv);
+    if (Number.isInteger(m) && m >= 1 && m <= 30) return m;
+  }
   const raw = getTenantSettingValue_(tenantId, 'follow_days_after_ship');
   const n   = Number(raw);
   if (raw === null || raw === '' || isNaN(n) || n < 0) return null;
@@ -525,6 +531,29 @@ const TENANT_SETTING_DEFS_ = [
   { key: 'coupon_enabled', value: 'false', description: 'クーポン自動発行を有効にするか。true のテナントだけ発行する（未設定・false は発行しない＝fail-closed）', editable: 'FALSE' },
   { key: 'max_sends_per_run', value: '', description: '1回（毎時）の実行で送るメールの上限件数。空なら既定50。上限に達した分は次回以降に回る', editable: 'FALSE' },
   { key: 'review_ingest_enabled', value: 'false', description: 'ECOS からのレビュー自動取込（Webhook ingest_reviews）を受け付けるか。false の間は受信を拒否する（fail-closed）', editable: 'FALSE' },
+  { key: 'follow_delay_days', value: '', description: '店舗設定画面のフォローメール送信日数（出荷日から。整数1〜30）。空なら follow_days_after_ship を使う', editable: 'FALSE' },
+  { key: 'review_tier_count', value: '', description: 'レビューお礼の段階数(1/2/3)。空=未保存で送信しない（fail-closed）', editable: 'FALSE' },
+  { key: 'review_tier_b1', value: '', description: '段階の区切り1（tier1=★5〜b1）', editable: 'FALSE' },
+  { key: 'review_tier_b2', value: '', description: '段階の区切り2（3段階のみ。tier2=★(b1-1)〜b2）', editable: 'FALSE' },
+  { key: 'tier_coupon_diff_agreed_at', value: '', description: '段階ごとに異なるクーポンURLの確認に同意した日時', editable: 'FALSE' },
+  { key: 'tier_coupon_diff_agreed_by', value: '', description: '上記に同意した人', editable: 'FALSE' },
+  { key: 'tier1_enabled', value: '', description: '段階1のお礼メールを送るか(true/false)', editable: 'FALSE' },
+  { key: 'tier1_subject', value: '', description: '段階1の件名', editable: 'FALSE' },
+  { key: 'tier1_body', value: '', description: '段階1の本文', editable: 'FALSE' },
+  { key: 'tier1_coupon_url', value: '', description: '段階1のクーポンURL（https かつ *.rakuten.co.jp のみ。空欄可）', editable: 'FALSE' },
+  { key: 'tier2_enabled', value: '', description: '段階2のお礼メールを送るか(true/false)', editable: 'FALSE' },
+  { key: 'tier2_subject', value: '', description: '段階2の件名', editable: 'FALSE' },
+  { key: 'tier2_body', value: '', description: '段階2の本文', editable: 'FALSE' },
+  { key: 'tier2_coupon_url', value: '', description: '段階2のクーポンURL', editable: 'FALSE' },
+  { key: 'tier3_enabled', value: '', description: '段階3のお礼メールを送るか(true/false)', editable: 'FALSE' },
+  { key: 'tier3_subject', value: '', description: '段階3の件名', editable: 'FALSE' },
+  { key: 'tier3_body', value: '', description: '段階3の本文', editable: 'FALSE' },
+  { key: 'tier3_coupon_url', value: '', description: '段階3のクーポンURL', editable: 'FALSE' },
+  { key: 'last_review_sync_at', value: '', description: '拡張機能が最後にレビュー取込に成功した日時（JST）', editable: 'FALSE' },
+  { key: 'ext_status', value: '', description: '拡張機能の最新状態 ok / not_logged_in / failed', editable: 'FALSE' },
+  { key: 'ext_status_at', value: '', description: '拡張機能が最後に状態を送ってきた日時（JST）', editable: 'FALSE' },
+  { key: 'ext_version', value: '', description: '拡張機能のバージョン', editable: 'FALSE' },
+  { key: 'ext_problem_since', value: '', description: '要対応になった時刻（正常に戻ると空に戻す。メール段階の起点）', editable: 'FALSE' },
 ];
 
 const MAX_SENDS_PER_RUN_DEFAULT_ = 50;

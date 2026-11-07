@@ -23,8 +23,8 @@
    * GAS の ok:false は再試行しない。戻り値: { ok:true, data } | { ok:false, error }
    * deps: { fetchFn, sleep, gasUrl? }
    */
-  async function callGas(payload, deps) {
-    var body = JSON.stringify({ action: 'ext_ingest_reviews', payload: payload });
+  async function callGas(payload, deps, action) {
+    var body = JSON.stringify({ action: action || 'ext_ingest_reviews', payload: payload });
     var delays = config.RETRY_DELAYS_MS;
     for (var attempt = 0; ; attempt++) {
       var data = null;
@@ -45,6 +45,12 @@
     }
   }
 
+  /** 未ログイン・失敗の状態を GAS へ知らせる（レビューは送らない）。成功は ext_ingest_reviews の実書き込みで GAS が記録する */
+  async function reportStatus(token, status, deps) {
+    if (status !== 'not_logged_in' && status !== 'failed') return { ok: false, error: 'invalid_payload' };
+    return callGas({ token: token, status: status, version: config.VERSION }, deps, 'ext_report_status');
+  }
+
   /** dry_run・空配列の呼び出し（トークン・テナント・課金の検証と initial_from の取得） */
   async function probe(token, deps) {
     var r = await callGas({ token: token, dry_run: true, reviews: [] }, deps);
@@ -56,12 +62,12 @@
   async function sendAll(reviews, token, deps) {
     var chunks = chunk(reviews), inserted = 0, updated = 0;
     for (var i = 0; i < chunks.length; i++) {
-      var r = await callGas({ token: token, dry_run: false, reviews: chunks[i] }, deps);
+      var r = await callGas({ token: token, dry_run: false, reviews: chunks[i], ext_version: config.VERSION }, deps);
       if (!r.ok) return { ok: false, error: r.error, sentChunks: i, totalChunks: chunks.length };
       inserted += Number(r.data.inserted) || 0; updated += Number(r.data.updated) || 0;
     }
     return { ok: true, sentChunks: chunks.length, totalChunks: chunks.length, inserted: inserted, updated: updated };
   }
 
-  return { GAS_ERRORS: GAS_ERRORS, chunk: chunk, callGas: callGas, probe: probe, sendAll: sendAll };
+  return { GAS_ERRORS: GAS_ERRORS, chunk: chunk, callGas: callGas, probe: probe, sendAll: sendAll, reportStatus: reportStatus };
 });

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ステップ侍 レビュー取込",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "楽天 RMS のレビューチェックツールから、評価・投稿日時・注文番号などの最小項目だけを、店舗自身の step-samurai に取り込みます。",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "notifications"],
   "host_permissions": [
     "https://review.rms.rakuten.co.jp/*",
     "https://script.google.com/*",
@@ -13,7 +13,7 @@
   "content_scripts": [
     {
       "matches": ["https://review.rms.rakuten.co.jp/*"],
-      "js": ["lib/config.js", "lib/time.js", "lib/csv.js", "lib/fetcher.js", "content.js"],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],

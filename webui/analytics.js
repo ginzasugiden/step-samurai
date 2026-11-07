@@ -74,6 +74,7 @@ async function loginCommon(getToken) {
     const ok = await load();
     if (!ok) { state.token = ''; return; }
     loginScreen.hidden = true; appScreen.hidden = false;
+    if (window.ssStoreInit) window.ssStoreInit(callApi, { skipTerms: true });   // 取り込み停止の赤い帯（storecommon.js）
   } catch (e) {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';

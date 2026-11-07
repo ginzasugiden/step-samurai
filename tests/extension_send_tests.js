@@ -87,25 +87,21 @@ t('同期中フラグ: 二重実行を拒否し、タイムアウト後は再開
   assert.ok((await state.beginSync(store, now + config.SYNC_TIMEOUT_MS + 1, false)).ok);
   assert.equal((await state.beginSync(mkStore({}), now, false)).reason, 'no_token');
 });
-t('バッジ: 設定 / ! / エラー別の短い文字 / 正常は空', () => {
-  const now = jst(2026, 10, 24, 9), fresh = now - 3600e3, old = now - 3 * 24 * 3600e3 - 1000;
+t('バッジ: 設定 / 未ログイン・失敗は赤い ! / 48時間超は赤い 48h / 正常は空（0件でも正常）', () => {
+  const now = jst(2026, 10, 24, 9), fresh = now - 3600e3, old = now - 48 * 3600e3 - 1000;
   const b = o => state.badgeFor(o, now);
   assert.equal(b({}).text, '設定');
-  assert.equal(b({ token: TOKEN }).text, '!');                       // 一度も同期なし
-  assert.equal(b({ token: TOKEN, lastSyncAt: old, status: 'ok' }).text, '!');
+  assert.equal(b({ token: TOKEN }).text, '');
+  assert.equal(b({ token: TOKEN, lastSyncAt: old, status: 'ok' }).text, '48h'); assert.equal(b({ token: TOKEN, lastSyncAt: old, status: 'ok' }).color, '#dc2626');
   assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'ok' }).text, '');
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh - 2 * 24 * 3600e3 }).text, '');   // 3日以内
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'login_required' }).text, 'ログ');
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'token_revoked' }).text, '鍵');
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'unauthorized' }).text, '鍵');
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'csv_format' }).text, '要更新');
-  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'billing_not_allowed' }).text, 'ERR');
-  const colors = new Set(['', 'login_required'].map(s => b({ token: TOKEN, lastSyncAt: fresh, status: s }).color).concat(b({}).color, b({ token: TOKEN }).color));
-  assert.ok(colors.size >= 3);
+  assert.equal(b({ token: TOKEN, lastSyncAt: now - 47 * 3600e3 }).text, '');
+  ['login_required', 'token_revoked', 'unauthorized', 'csv_format', 'billing_not_allowed', 'network', 'fetch_failed'].forEach(st => { const r = b({ token: TOKEN, lastSyncAt: fresh, status: st }); assert.equal(r.text, '!', st); assert.equal(r.color, '#dc2626'); });
+  assert.equal(state.classify({ token: TOKEN, status: 'login_required' }), 'not_logged_in'); assert.equal(state.classify({ token: TOKEN, status: 'csv_format' }), 'failed'); assert.equal(state.classify({ token: TOKEN, status: 'ok' }), 'ok');
+  assert.equal(b({ token: TOKEN, lastSyncAt: fresh, status: 'ok' }).text, '');
 });
 t('日本語の案内: すべての状態コードに文面があり、保存対象は5キーのみ', () => {
   ['login_required', 'csv_format', 'cap_unsplittable', 'unauthorized', 'token_revoked', 'tenant_not_active', 'billing_not_allowed', 'invalid_payload', 'too_many_rows', 'busy', 'network', 'internal_error'].forEach(c => assert.ok(/[぀-ヿ一-鿿]/.test(state.MESSAGES[c]), c));
-  assert.deepEqual(state.KEYS, ['token', 'lastSyncAt', 'status', 'lastAutoDay', 'syncingSince']);
+  assert.deepEqual(state.KEYS, ['token', 'lastSyncAt', 'status', 'lastAutoDay', 'syncingSince', 'notified']);
   const d = state.describe({ token: TOKEN, lastSyncAt: jst(2026, 10, 24, 9, 5) }, jst(2026, 10, 24, 10));
   assert.equal(d.lastSync, '2026/10/24 9:05（日本時間）');
 });

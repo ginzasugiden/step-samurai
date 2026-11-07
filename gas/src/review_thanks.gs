@@ -69,15 +69,24 @@ function sendReviewThanksMail(tenantId, order, opts) {
   if (alreadySent_(sends, order.order_number, recordType)) return { skipped: 'already_sent' };
 
   const creds = getRmsCredentials(tenantId);
-  const tpl   = getTenantTemplateRaw_(tenantId, 'review_thanks_v1');
-  if (!tpl) {
-    Logger.log(`[${tenantId}] sendReviewThanksMail: templates タブ or review_thanks_v1 が見つからないためスキップ（fail-closed） order=${order.order_number}`);
-    return { skipped: 'template_missing' };
+  const vars  = buildReviewThanksMailVars_(order, creds);
+  let subject, body, templateId = 'review_thanks_v1';
+  if (order.tier_no) {
+    // ★段階別（review_tiers.gs）。段階設定が読めない・無効・文面が空なら送らない（fail-closed）
+    const cfg = getReviewTierConfig_(tenantId);
+    const tc  = cfg && cfg.tiers[order.tier_no];
+    if (!tc || !tc.enabled || !tc.subject || !tc.body) return { skipped: 'tier_not_sendable' };
+    const mail = renderTierMail_(tc, vars, order.review_rating);
+    subject = mail.subject; body = mail.body; templateId = 'review_tier' + order.tier_no;
+  } else {
+    const tpl = getTenantTemplateRaw_(tenantId, 'review_thanks_v1');
+    if (!tpl) {
+      Logger.log(`[${tenantId}] sendReviewThanksMail: templates タブ or review_thanks_v1 が見つからないためスキップ（fail-closed） order=${order.order_number}`);
+      return { skipped: 'template_missing' };
+    }
+    subject = renderTemplate_(tpl.subject, vars);
+    body    = renderTemplate_(tpl.body, vars);
   }
-
-  const vars    = buildReviewThanksMailVars_(order, creds);
-  const subject = renderTemplate_(tpl.subject, vars);
-  const body    = renderTemplate_(tpl.body, vars);
   const to      = resolveRecipient_(order.masked_email);
 
   if (isTenantDryRun_(tenantId)) {
@@ -88,9 +97,9 @@ function sendReviewThanksMail(tenantId, order, opts) {
   let result;
   try {
     result = sendViaBridge_(tenantId, to, creds.from_email, creds.from_name, subject, body, '', creds.reply_to, creds.cc_email);
-    recordSend_(sends, order.order_number, order.buyer_key, recordType, 'review_thanks_v1', 'sent');
+    recordSendWithExtras_(sends, order.order_number, order.buyer_key, recordType, templateId, 'sent', { tier_no: order.tier_no || '', rating: order.review_rating === undefined ? '' : order.review_rating });
   } catch (e) {
-    recordSend_(sends, order.order_number, order.buyer_key, recordType, 'review_thanks_v1', `error: ${e.message}`);
+    recordSendWithExtras_(sends, order.order_number, order.buyer_key, recordType, templateId, `error: ${e.message}`, { tier_no: order.tier_no || '', rating: order.review_rating === undefined ? '' : order.review_rating });
     throw e;
   }
   return { sent: true, to: to, subject: subject, bridge: result };
@@ -116,7 +125,17 @@ function collectPendingReviewThanks_(tenantId) {
     out.disabled = 'go_live_date_unset';
     return out;
   }
-  const minRating = getReviewThanksMinRating_(tenantId);
+  // 段階設定が保存済みなら段階別、未保存なら送らない（fail-closed）。移行前の暫定例外店舗のみ従来の min_rating 方式
+  const tierCfg = getReviewTierConfig_(tenantId);
+  if (tierCfg) out.mode = 'tiers';
+  else if (isLegacyReviewThanksTenant_(tenantId)) out.mode = 'legacy';
+  else {
+    Logger.log(`[${tenantId}] review_thanks: レビュー段階の設定が未保存のため全スキップ（fail-closed）`);
+    out.disabled = 'tiers_unset';
+    return out;
+  }
+  const tierSettings = tierCfg ? { review_tier_count: tierCfg.count, review_tier_b1: tierCfg.b1, review_tier_b2: tierCfg.b2 } : null;
+  const minRating = tierCfg ? 1 : getReviewThanksMinRating_(tenantId);
   const excluded  = getTenantExcludedOrders_(tenantId);
   const reviews   = collectReviewsByOrder_(tenantId);
   if (!Object.keys(reviews).length) return out;
@@ -140,7 +159,13 @@ function collectPendingReviewThanks_(tenantId) {
     if (!shipDate)                                          return skip('not_shipped', orderNumber);
     if (!isOnOrAfterGoLiveDate_(shipDate, goLiveDate))      return skip('before_go_live', orderNumber);
     if (!rv.posted_at || rv.posted_at < since)              return skip('review_before_since', orderNumber);
-    if (rv.rating < minRating)                              return skip('low_rating', orderNumber);
+    let tierNo = null;
+    if (tierCfg) {
+      tierNo = resolveReviewTier_(tierSettings, rv.rating);
+      if (!tierNo)                                          return skip('no_tier', orderNumber);
+      if (!tierCfg.tiers[tierNo].enabled)                   return skip('tier_disabled', orderNumber);
+      if (!tierCfg.tiers[tierNo].subject || !tierCfg.tiers[tierNo].body) return skip('tier_empty', orderNumber);
+    } else if (rv.rating < minRating)                       return skip('low_rating', orderNumber);
     if (alreadySent_(sends, orderNumber, 'review_thanks'))  return skip('already_sent', orderNumber);
 
     out.targets.push({
@@ -152,6 +177,7 @@ function collectPendingReviewThanks_(tenantId) {
       status:       row[idx('status')],
       review_rating:    rv.rating,
       review_posted_at: rv.posted_at,
+      tier_no:          tierNo,
     });
   });
 

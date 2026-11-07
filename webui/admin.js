@@ -57,7 +57,7 @@ $('login-btn').addEventListener('click', async () => {
   try {
     const r = await callApi('list_tenants');
     if (!r.ok) { $('login-error').textContent = 'ログイン失敗: ' + r.error; $('login-error').hidden = false; state.token = ''; return; }
-    state.tenants = r.tenants; renderTenants(); loadSystem();
+    state.tenants = r.tenants; renderTenants(); loadSystem(); loadSyncProblems();
     $('login-screen').hidden = true; $('app-screen').hidden = false;
   } catch (e) { $('login-error').textContent = '通信エラー: ' + e.message; $('login-error').hidden = false; }
   finally { busy($('login-btn'), false, 'ログイン'); hideOverlay(); }
@@ -65,8 +65,23 @@ $('login-btn').addEventListener('click', async () => {
 $('logout-btn').addEventListener('click', () => { state.apiUrl = state.token = ''; state.tenants = []; $('api-token').value = ''; $('app-screen').hidden = true; $('login-screen').hidden = false; });
 $('reload-btn').addEventListener('click', reloadTenants);
 
+const SYNC_CAUSE = { not_logged_in: '未ログイン', failed: '取り込み失敗', stale: '48時間以上なし', never: '未インストール（連絡なし）' };
+async function loadSyncProblems() {
+  try {
+    const r = await callApi('list_sync_problems'); if (!r.ok) return;
+    const tb = document.querySelector('#sync-problems-table tbody'); tb.textContent = '';
+    r.problems.forEach(p => {
+      const tr = document.createElement('tr');
+      [p.tenant_id, p.shop_name, SYNC_CAUSE[p.cause] || p.cause, Math.floor(p.elapsed_hours) + '時間' + (p.over_48h ? '（48時間超）' : ''), p.last_review_sync_at || '—'].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
+      if (p.over_48h) tr.style.background = '#fdecea';
+      tb.appendChild(tr);
+    });
+    $('sync-problems-card').hidden = r.problems.length === 0;
+  } catch (e) { /* 一覧が出せなくても他の画面に影響させない */ }
+}
 async function reloadTenants() {
   const r = await callApi('list_tenants'); if (r.ok) { state.tenants = r.tenants; renderTenants(); }
+  loadSyncProblems();
   loadSystem();
   if (state.current) selectTenant(state.current.tenant_id);
 }

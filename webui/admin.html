@@ -36,6 +36,12 @@
       <div id="system-status" class="mono"></div>
     </section>
 
+    <section class="card" id="sync-problems-card" hidden>
+      <h2>要対応：レビュー自動取り込みが止まっている店舗</h2>
+      <p class="hint">拡張機能の取り込みが「未ログイン」「失敗」「48時間以上なし」「未インストール」の店舗です（経過時間の長い順）。店舗と運営へ警告メールが自動で送られます（初回→24時間→48時間は運営にも→以降1日1回）。</p>
+      <div class="table-wrap"><table id="sync-problems-table"><thead><tr><th>tenant_id</th><th>店舗名</th><th>原因</th><th>経過時間</th><th>最後に成功した日時</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
     <section class="card">
       <h2>テナント一覧</h2>
       <div class="table-wrap"><table id="tenant-table"><thead>

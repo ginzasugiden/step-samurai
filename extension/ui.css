@@ -18,3 +18,7 @@ a { color: var(--accent); }
 .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
 .box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; background: #f9fafb; }
 table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid var(--line); padding: 4px 8px; text-align: left; font-size: 13px; }
+
+.status { padding: 12px 14px; border-radius: 8px; font-size: 18px; margin-bottom: 8px; color: #fff; background: var(--muted); }
+.status.ok { background: var(--ok); } .status.error { background: var(--err); } .status.warn { background: var(--warn); } .status.info { background: var(--accent); }
+.status .badge { display: none; }

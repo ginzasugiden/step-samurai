@@ -65,7 +65,7 @@ const ctx = { PropertiesService, Utilities, Logger, SpreadsheetApp, LockService,
   CacheService: { getScriptCache: () => ({ get: k => (cacheStore[k] === undefined ? null : cacheStore[k]), put: (k, v) => { if (cacheRefuse && k === 'ext_token_hashes') throw new Error('too large'); cacheStore[k] = v; }, remove: k => { delete cacheStore[k]; } }) },   // 有効期限は模擬しない（テスト内で clearCache で経過を表す）
   Date: class extends Date { constructor(...a) { super(...(a.length ? a : [fakeNow.getTime()])); } static now() { return fakeNow.getTime(); } } };
 vm.createContext(ctx);
-['crypto_store.gs', 'auth.gs', 'tenant.gs', 'config.gs', 'billing.gs', 'onboarding.gs', 'admin_api.gs', 'purge.gs', 'analytics_backfill.gs', 'mailer.gs', 'reviews_import.gs', 'reviews_ingest.gs', 'reviews_ext.gs', 'review_thanks.gs', 'webapp.gs']
+['crypto_store.gs', 'auth.gs', 'tenant.gs', 'config.gs', 'billing.gs', 'onboarding.gs', 'admin_api.gs', 'purge.gs', 'analytics_backfill.gs', 'mailer.gs', 'reviews_import.gs', 'reviews_ingest.gs', 'reviews_ext.gs', 'review_thanks.gs', 'review_tiers.gs', 'webapp.gs']
   .forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 const rapi = load('rakuten_api.gs'); const li = rapi.indexOf('function linkOrdersReviews('); vm.runInContext(rapi.substring(li, rapi.indexOf('\n}\n', li) + 3), ctx);
 vm.runInContext('function jsonResponse_(o) { return o; }', ctx);

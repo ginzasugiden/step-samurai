@@ -11,24 +11,24 @@
     lv.className = 'badge ' + d.level;
     lv.textContent = LEVEL_LABEL[d.level];
     $('headline').textContent = d.headline;
+    $('status').className = 'status ' + d.level;
     $('detail').textContent = d.detail;
     $('last').textContent = d.lastSync;
     $('sync').disabled = state.isSyncing(state.normalize(raw), Date.now());
   }
 
   $('sync').addEventListener('click', async function () {
-    $('guide').hidden = true;
-    $('result').textContent = '';
+    $('result').textContent = '取り込んでいます…';
     $('sync').disabled = true;
     var r;
-    try { r = await chrome.runtime.sendMessage({ type: 'manual_sync' }); } catch (e) { r = { ok: false, reason: 'no_content' }; }
-    if (r && r.ok) $('result').textContent = '同期を開始しました。しばらくお待ちください。';
-    else if (r && r.reason === 'no_tab') $('guide').hidden = false;
-    else if (r && r.reason === 'syncing') $('result').textContent = 'すでに同期中です。';
+    try { r = await chrome.runtime.sendMessage({ type: 'manual_sync' }); } catch (e) { r = { ok: false, error: 'internal_error' }; }
+    if (r && r.ok) $('result').textContent = '取り込みが完了しました。';
+    else if (r && r.reason === 'syncing') $('result').textContent = 'すでに取り込み中です。';
     else if (r && r.reason === 'no_token') $('result').textContent = state.messageFor('no_token');
-    else if (r && r.reason === 'no_content') $('result').textContent = state.messageFor('no_content');
+    else $('result').textContent = state.messageFor((r && r.error) || 'internal_error');
     await render();
   });
+  $('openrms').addEventListener('click', function () { chrome.runtime.sendMessage({ type: 'open_rms' }); });
 
   $('settings').addEventListener('click', function (e) { e.preventDefault(); chrome.runtime.openOptionsPage(); });
   chrome.storage.onChanged.addListener(function () { render(); });

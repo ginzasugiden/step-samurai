@@ -40,6 +40,7 @@ function doPost(e) {
     if (action === 'fincode_webhook') return jsonResponse_(handleFincodeWebhook_(req.payload || {})); // lolipop/fincode_webhook.php 経由（BRIDGE_TOKEN 認証・未設定なら拒否）
     if (action === 'ingest_reviews') return jsonResponse_(handleIngestReviews_(req.payload || {})); // ECOS Webhook（専用キー認証。テナントトークン不要）
     if (action === 'ext_ingest_reviews') return jsonResponse_(handleExtIngestReviews_(req.payload || {})); // 店舗配布用 Chrome 拡張（レビュー取込専用トークン。reviews_ext.gs。token は payload 内）
+    if (action === 'ext_report_status') return jsonResponse_(handleExtReportStatus_(req.payload || {}));   // 拡張の状態報告（未ログイン・失敗。reviews_ext.gs / sync_alerts.gs）
     if (action === 'monitor_apply') return jsonResponse_(handleMonitorApply_(req.payload || {}));   // モニター応募（公開入口・Turnstile 検証・apply.gs）
     if (action === 'onboard_check')  return jsonResponse_(onboardCheck_(req.payload || {}));   // 招待コードで認証（onboarding.gs）
     if (action === 'onboard_submit') return jsonResponse_(onboardSubmit_(req.payload || {}));
@@ -124,6 +125,27 @@ function handleTenantAction_(req) {
       case 'import_reviews':
         // 解析して reviews タブへ upsert し、orders との紐づけを更新する
         return jsonResponse_(importReviewsFromCsv_(tenantId, String(payload.csv || ''), false));
+
+      // ----- 店舗設定画面（review_tiers.gs / sync_alerts.gs）。tenantId は上のトークンから解決したものだけを使う -----
+      case 'get_store_settings':
+        return jsonResponse_(getStoreSettings_(tenantId));
+
+      case 'save_store_settings':
+        return jsonResponse_(saveStoreSettings_(tenantId, payload, 'store:' + tenantId));
+
+      case 'preview_store_mail':
+        return jsonResponse_(previewStoreMail(tenantId, String(payload.type || ''), payload.tier_no, payload.draft));
+
+      case 'send_store_test_mail':
+        return jsonResponse_(sendStoreTestMail(tenantId, String(payload.type || ''), payload.tier_no, payload.draft));
+
+      case 'agree_terms':
+        return jsonResponse_(agreeTermsStore_(tenantId, payload));
+
+      case 'get_sync_status': {
+        const issued = activeExtTokenIssuedMap_()[tenantId] || '';
+        return jsonResponse_(Object.assign({ ok: true, has_ext: !!issued }, getSyncStatus_(tenantId, Date.now(), issued)));
+      }
 
       default:
         return jsonResponse_({ ok: false, error: 'unknown_action' });

@@ -33,7 +33,10 @@
     CHUNK_SIZE: 500,            // GAS への1回の送信上限
     RETRY_DELAYS_MS: [1000, 3000, 9000],
     OVERLAP_MS: 2 * 24 * 3600 * 1000,   // 前回同期の2日前から
-    STALE_MS: 3 * 24 * 3600 * 1000,     // 3日超でバッジ「!」
+    STALE_MS: 48 * 3600 * 1000,         // 48時間超で赤いバッジ「48h」
+    AUTO_SYNC_MINUTES: 180,             // 自動取り込みの間隔（3時間）
+    VERSION: '1.1.0',                   // manifest の version と一致させる（テストで確認）
+    RMS_LOGIN_URL: RMS_ORIGIN + '/',    // 「RMSを開く」で開くURL（未ログインならログイン画面へ遷移する）
     SYNC_TIMEOUT_MS: 10 * 60 * 1000,    // 同期中フラグの有効時間
     FALLBACK_INITIAL_DAYS: 30,
     COLUMNS: {                          // ヘッダ名で列を特定する

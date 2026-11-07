@@ -8,10 +8,10 @@ let pass = 0; const t = (n, f) => { try { f(); pass++; console.log('  ok  ' + n)
 const sorted = a => [...a].sort();
 
 t('Manifest V3・名前・バージョン', () => {
-  assert.equal(m.manifest_version, 3); assert.equal(m.name, 'ステップ侍 レビュー取込'); assert.equal(m.version, '1.0.0');
+  assert.equal(m.manifest_version, 3); assert.equal(m.name, 'ステップ侍 レビュー取込'); assert.equal(m.version, '1.1.0'); assert.equal(require('../extension/lib/config.js').VERSION, m.version);
 });
-t('permissions は storage と alarms のみ（完全一致）', () => {
-  assert.deepEqual(sorted(m.permissions), ['alarms', 'storage']);
+t('permissions は storage・alarms・notifications のみ（完全一致。v1.0.0 からの追加は notifications だけ）', () => {
+  assert.deepEqual(sorted(m.permissions), ['alarms', 'notifications', 'storage']);
   assert.equal(m.optional_permissions, undefined); assert.equal(m.optional_host_permissions, undefined);
 });
 t('host_permissions は3つのみ（完全一致）', () => {
@@ -41,11 +41,11 @@ t('HTML にインライン script がなく、外部スクリプト（リモー�
     assert.ok(!/\son\w+\s*=/.test(s), h + ' にインラインイベントハンドラ');
   });
 });
-t('コードが禁止 API を使わない（tabs 権限が要る API・cookies・webRequest・notifications・scripting・storage.sync・eval）', () => {
+t('コードが禁止 API を使わない（tabs 権限が要る API・cookies・webRequest・scripting・storage.sync・eval）', () => {
   const code = ['background.js', 'content.js', 'popup.js', 'options.js', ...fs.readdirSync(path.join(EXT, 'lib')).map(f => 'lib/' + f)].map(read).join('\n');
-  [/chrome\.cookies/, /chrome\.webRequest/, /chrome\.notifications/, /chrome\.scripting/, /storage\.sync/, /\beval\s*\(/, /new Function\(/, /document\.cookie/].forEach(re => assert.ok(!re.test(code), String(re)));
-  assert.ok(!/\.tabs\.(create|update|remove|reload)\b/.test(code));
-  assert.ok(/chrome\.tabs\.query\(\{ url:/.test(code));   // host 権限で足りる形（url フィルタ）
+  [/chrome\.cookies/, /chrome\.webRequest/,/chrome\.scripting/, /storage\.sync/, /\beval\s*\(/, /new Function\(/, /document\.cookie/].forEach(re => assert.ok(!re.test(code), String(re)));
+  assert.ok(!/\.tabs\.(update|remove|reload)\b/.test(code));
+  assert.ok(!/chrome.tabs.query/.test(code));   // tabs.query は使わない（タブの一覧を読まない）。tabs.create は権限不要で「RMSを開く」にのみ使う
   assert.ok(!/innerHTML/.test(code));
 });
 

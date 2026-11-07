@@ -8,7 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, 'state', function (req) {
   var config = req('config'), time = req('time');
 
-  var KEYS = ['token', 'lastSyncAt', 'status', 'lastAutoDay', 'syncingSince'];
+  var KEYS = ['token', 'lastSyncAt', 'status', 'lastAutoDay', 'syncingSince', 'notified'];
 
   var HARD_TOKEN = ['unauthorized', 'token_revoked'];
   var SOFT = ['busy', 'network'];   // 次回に持ち越す一時的な失敗（バッジは通常ロジック）
@@ -42,6 +42,7 @@
       status: typeof raw.status === 'string' && raw.status ? raw.status : null,
       lastAutoDay: typeof raw.lastAutoDay === 'string' && raw.lastAutoDay ? raw.lastAutoDay : null,
       syncingSince: Number(raw.syncingSince) > 0 ? Number(raw.syncingSince) : null,
+      notified: raw.notified === 'problem' ? 'problem' : '',
     };
   }
   function isSyncing(s, now) { return !!s.syncingSince && now - s.syncingSince < config.SYNC_TIMEOUT_MS; }
@@ -68,18 +69,26 @@
     await store.set(patch);
   }
 
+  /** 状態の分類（GAS へ送る値と同じ）: 'ok' | 'not_logged_in' | 'failed' */
+  function classify(raw) {
+    var s = normalize(raw);
+    if (!s.status || s.status === 'ok') return 'ok';
+    return s.status === 'login_required' ? 'not_logged_in' : 'failed';
+  }
+  /** 要対応か（未ログイン・失敗中、または最終成功から48時間超） */
+  function needsAction(raw, now) {
+    var s = normalize(raw);
+    if (!s.token) return false;
+    return classify(raw) !== 'ok' || (!!s.lastSyncAt && now - s.lastSyncAt > config.STALE_MS);
+  }
+
+  /** アイコンのバッジ: 設定未了は「設定」、未ログイン・失敗中は赤い「!」、48時間超は赤い「48h」。正常に戻ったら消す */
   function badgeFor(raw, now) {
     var s = normalize(raw);
-    var GRAY = '#6b7280', AMBER = '#d97706', RED = '#dc2626';
+    var GRAY = '#6b7280', RED = '#dc2626';
     if (!s.token) return { text: '設定', color: GRAY };
-    var st = s.status;
-    if (st && st !== 'ok' && SOFT.indexOf(st) < 0) {
-      if (st === 'login_required') return { text: 'ログ', color: RED };
-      if (HARD_TOKEN.indexOf(st) >= 0) return { text: '鍵', color: RED };
-      if (st === 'csv_format' || st === 'cap_unsplittable') return { text: '要更新', color: RED };
-      return { text: 'ERR', color: RED };
-    }
-    if (isStale(s, now)) return { text: '!', color: AMBER };
+    if (classify(raw) !== 'ok') return { text: '!', color: RED };
+    if (isStale(s, now) && s.lastSyncAt) return { text: '48h', color: RED };
     return { text: '', color: GRAY };
   }
 
@@ -91,13 +100,14 @@
     if (isSyncing(s, now)) return { level: 'info', headline: '同期中です', detail: 'RMS からレビュー項目を取得して送信しています。', lastSync: lastSync };
     var st = s.status;
     if (st && st !== 'ok') {
-      return { level: SOFT.indexOf(st) >= 0 ? 'warn' : 'error', headline: '同期できませんでした', detail: messageFor(st), lastSync: lastSync };
+      return { level: 'error', headline: st === 'login_required' ? '要対応：RMSにログインしてください' : '要対応：取り込めませんでした', detail: messageFor(st), lastSync: lastSync };
     }
-    if (isStale(s, now)) {
-      return { level: 'warn', headline: '同期から日数が経っています', detail: 'RMS のレビューチェックツールを開いて同期してください（3日以上同期されていません）。', lastSync: lastSync };
+    if (isStale(s, now) && s.lastSyncAt) {
+      return { level: 'error', headline: '要対応：48時間以上取り込めていません', detail: 'Chrome を起動して RMS にログインし、「今すぐ取り込む」を押してください。', lastSync: lastSync };
     }
+    if (!s.lastSyncAt) return { level: 'info', headline: '初回の取り込みを待っています', detail: 'Chrome を起動して RMS にログインしている間に、3時間ごとに自動で取り込みます。', lastSync: lastSync };
     return { level: 'ok', headline: '正常です', detail: MESSAGES.ok, lastSync: lastSync };
   }
 
-  return { KEYS: KEYS, MESSAGES: MESSAGES, messageFor: messageFor, normalize: normalize, isSyncing: isSyncing, isStale: isStale, beginSync: beginSync, finishSync: finishSync, badgeFor: badgeFor, describe: describe };
+  return { classify: classify, needsAction: needsAction, KEYS: KEYS, MESSAGES: MESSAGES, messageFor: messageFor, normalize: normalize, isSyncing: isSyncing, isStale: isStale, beginSync: beginSync, finishSync: finishSync, badgeFor: badgeFor, describe: describe };
 });

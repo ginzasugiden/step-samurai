@@ -42,7 +42,7 @@ const SpreadsheetApp = { openById: id => books[id] };
 const sent = []; const fail = { n: 0 };
 const ctx = { PropertiesService, CacheService, Utilities, Logger, SpreadsheetApp, console, isDryRun_: () => false, __sent: sent, __fail: fail };
 vm.createContext(ctx);
-['tenant.gs', 'config.gs', 'billing.gs', 'mailer.gs', 'review_thanks.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
+['tenant.gs', 'config.gs', 'billing.gs', 'mailer.gs', 'review_thanks.gs', 'review_tiers.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 vm.runInContext(`
   getRmsCredentials = () => ({ shop_name: 'S', from_email: 'c@x.jp', from_name: 'S', reply_to: 'c@x.jp', cc_email: '', shop_signature: '署名' });
   sendViaBridge_ = (tenantId, to) => { if (__fail.n > 0) { __fail.n--; throw new Error('bridge down'); } __sent.push(to); return { ok: true }; };
@@ -83,6 +83,7 @@ t('送信失敗も1回分に数え、失敗した注文は次回に再試行さ�
 console.log('review_thanks にも上限');
 t('sendPendingReviewThanks も1回あたり max_sends_per_run まで・再送しない', () => {
   sends.rows.length = 1; sent.length = 0; setSetting('max_sends_per_run', '4'); setSetting('review_thanks_since', '2026-09-01'); setSetting('review_thanks_min_rating', '3');
+  setSetting('review_tier_count', '2'); setSetting('review_tier_b1', '3'); setSetting('tier1_enabled', 'true'); setSetting('tier1_subject', 'お礼'); setSetting('tier1_body', '本文');
   for (let i = 0; i < 9; i++) reviews.appendRow([`R${i}`, orderNo(i), 'b', '', 5, '2026-09-10', '']);
   ctx.sendPendingReviewThanks('capshop'); assert.equal(sent.length, 4);
   ctx.sendPendingReviewThanks('capshop'); assert.equal(sent.length, 8);

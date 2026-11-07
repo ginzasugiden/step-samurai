@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>step-samurai メール設定</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="settings.css">
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="login-box">
+    <h1>step-samurai メール設定</h1>
+    <p class="hint">管理画面と同じ店舗ID・パスワードでログインします。このページを閉じると再ログインが必要です（ブラウザには保存されません）。</p>
+
+    <label for="tenant-id">店舗ID</label>
+    <input id="tenant-id" type="text" placeholder="例: tokyoflower" autocomplete="username" autocapitalize="off">
+
+    <label for="password">パスワード</label>
+    <input id="password" type="password" autocomplete="current-password">
+
+    <button type="button" id="login-btn">ログイン</button>
+
+    <details class="adv"><summary>アクセストークンでログイン／API のURLを変更する</summary>
+      <label for="api-url">API のURL</label>
+      <input id="api-url" type="text" placeholder="空なら既定のURLを使用" autocomplete="off">
+      <label for="api-token">アクセストークン</label>
+      <input id="api-token" type="password" placeholder="発行されたトークンを入力" autocomplete="new-password">
+      <button type="button" id="token-login-btn" class="secondary">トークンでログイン</button>
+    </details>
+    <p id="login-error" class="error" hidden></p>
+    <p class="hint"><a href="index.html">管理画面へ</a></p>
+  </div>
+</div>
+
+<div id="app-screen" class="screen" hidden>
+  <header class="app-header">
+    <h1>step-samurai メール設定</h1>
+    <div>
+      <a href="index.html" class="link-btn">管理画面</a>
+      <button type="button" id="logout-btn" class="secondary">ログアウト</button>
+    </div>
+  </header>
+
+  <main>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="follow" role="tab">フォローメール</button>
+      <button type="button" class="tab-btn" data-tab="review" role="tab">レビューお礼</button>
+      <button type="button" class="tab-btn" data-tab="sync" role="tab">取り込み状況</button>
+    </nav>
+
+    <!-- フォローメール -->
+    <section id="tab-follow" class="tab-panel active">
+      <h2>フォローメール</h2>
+      <p class="hint">発送した日から、設定した日数が過ぎたお客様に1回だけ送ります。</p>
+      <label for="f-delay">送るまでの日数（出荷日から。1〜30の整数）</label>
+      <input id="f-delay" type="number" min="1" max="30" step="1" inputmode="numeric">
+      <label for="f-subject">件名（120字以内）</label>
+      <input id="f-subject" type="text" maxlength="120">
+      <label for="f-body">本文（5000字以内）</label>
+      <textarea id="f-body" rows="12" maxlength="5000"></textarea>
+      <div class="vars-box"><strong>使える変数:</strong> <span class="vars-list"></span></div>
+      <div class="row">
+        <button type="button" id="f-preview" class="secondary">プレビュー</button>
+        <button type="button" id="f-test" class="secondary">テスト送信（店舗の登録メール宛て）</button>
+        <button type="button" id="f-save">保存</button>
+      </div>
+      <pre id="f-pv" class="pv" hidden></pre>
+      <p id="f-msg" class="msg" role="status"></p>
+    </section>
+
+    <!-- レビューお礼 -->
+    <section id="tab-review" class="tab-panel">
+      <h2>レビューお礼（★の数で文面を分ける）</h2>
+      <p id="terms-note" class="warn-box" hidden>クーポンURLを保存するには、利用規約（v1.3）への同意が必要です。<button type="button" id="terms-open" class="secondary">規約に同意する</button></p>
+      <p id="unconfigured-note" class="warn-box" hidden>レビューお礼の設定がまだ保存されていません。保存するまで、レビューお礼メールは送られません。</p>
+
+      <label for="r-count">段階の数</label>
+      <select id="r-count"><option value="1">1段階（★5〜★1すべて同じ）</option><option value="2">2段階</option><option value="3">3段階</option></select>
+      <div class="row">
+        <div><label for="r-b1">段階1の下限（★5〜）</label><select id="r-b1"></select></div>
+        <div id="r-b2-wrap"><label for="r-b2">段階2の下限</label><select id="r-b2"></select></div>
+      </div>
+
+      <div id="r-diagram" class="diagram" role="img" aria-label="★と段階の対応"></div>
+
+      <p class="warn-box strong">★の数によってクーポンの有無や内容を変えると、楽天市場のレビューガイドラインに抵触するおそれがあります。設定内容は店舗様の責任で管理してください。</p>
+      <div class="vars-box"><strong>使える変数:</strong> <span class="vars-list"></span><br><span class="hint">{rating}＝レビューの★、{coupon_url}＝その段階のクーポンURL（空欄ならその行ごと送りません）</span></div>
+
+      <div id="r-tiers"></div>
+
+      <div class="row"><button type="button" id="r-save">保存</button></div>
+      <p id="r-msg" class="msg" role="status"></p>
+    </section>
+
+    <!-- 取り込み状況 -->
+    <section id="tab-sync" class="tab-panel">
+      <h2>取り込み状況</h2>
+      <div id="sync-card" class="sync-card"></div>
+      <h3>止まっているときの対処</h3>
+      <ol class="steps">
+        <li>パソコンの Chrome を起動します。</li>
+        <li>楽天 RMS（<a href="https://review.rms.rakuten.co.jp/" target="_blank" rel="noopener">レビューチェックツール</a>）にログインします。</li>
+        <li>Chrome の右上の拡張機能アイコン「ステップ侍 レビュー取込」から「今すぐ取り込む」を押します。</li>
+      </ol>
+      <p class="hint">自動取り込みは、Chrome が起動していて、RMS にログインしている間に3時間ごとに動きます。ログイン情報はステップ侍・拡張機能には保存されません。</p>
+    </section>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="storecommon.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>

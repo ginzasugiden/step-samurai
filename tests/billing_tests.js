@@ -71,7 +71,7 @@ console.log('パイプライン各経路の skip（canceled テナント）');
   vm.createContext(c2);
   ['tenant.gs', 'billing.gs', 'main.gs'].forEach(f => vm.runInContext(load(f), c2, { filename: f }));
   // review_thanks.gs は依存が多いので sendPendingReviewThanks だけ抜き出して評価する
-  const rt = load('review_thanks.gs'); const i = rt.indexOf('function sendPendingReviewThanks('); vm.runInContext(rt.substring(i, rt.indexOf('\n}\n', i) + 3), c2);
+  const rt = load('review_thanks.gs', 'review_tiers.gs'); const i = rt.indexOf('function sendPendingReviewThanks('); vm.runInContext(rt.substring(i, rt.indexOf('\n}\n', i) + 3), c2);
   fixDate(c2);
   ['cancelshop', 'legacyshop', 'newshop'].forEach(id => { master.rows.find(r => r[0] === id)[3] = 'active'; });
   t('runHourlyFollowPipeline / runPipeline(クーポン含む) / sendPendingReviewThanks が canceled/past_due を skip', () => {

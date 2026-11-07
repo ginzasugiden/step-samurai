@@ -175,6 +175,8 @@ function runHourlyFollowPipeline() {
         notifyAdminSafe_(`[step-samurai] ${tenant.tenant_id} runHourlyFollowPipelineエラー: ${e.message}`);
       }
     });
+    // 拡張（レビュー自動取り込み）の状態監視メール。失敗しても毎時の処理には影響させない
+    try { processSyncAlerts_(); } catch (e) { Logger.log(`processSyncAlerts_ error: ${e.message}`); }
     pipelineLog_(HOURLY_LOG_ID_, 'hourly_done', `run=${runId} tenants=${stats.tenants} ran=${stats.ran} billing_skipped=${stats.billing_skipped} errors=${stats.errors}`);
   } catch(e) {
     Logger.log(`runHourlyFollowPipeline fatal (stage=${stage}): ${e.message}`);

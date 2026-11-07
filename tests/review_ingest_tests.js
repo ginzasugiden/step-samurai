@@ -38,7 +38,7 @@ const SpreadsheetApp = { openById: id => { if (!books[id]) throw new Error('no b
 
 const ctx = { PropertiesService, CacheService, Utilities, Logger, SpreadsheetApp, console, isDryRun_: () => props.DRY_RUN === 'true' };
 vm.createContext(ctx);
-['tenant.gs', 'config.gs', 'auth.gs', 'reviews_import.gs', 'review_thanks.gs', 'reviews_ingest.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
+['tenant.gs', 'config.gs', 'auth.gs', 'reviews_import.gs', 'review_thanks.gs', 'review_tiers.gs', 'reviews_ingest.gs'].forEach(f => vm.runInContext(load(f), ctx, { filename: f }));
 const rapi = load('rakuten_api.gs'); const li = rapi.indexOf('function linkOrdersReviews('); vm.runInContext(rapi.substring(li, rapi.indexOf('\n}\n', li) + 3), ctx);
 
 let pass = 0;

@@ -72,6 +72,7 @@ async function loginCommon(getToken) {
     await loadAll();
     loginScreen.hidden = true;
     appScreen.hidden = false;
+    if (window.ssStoreInit) window.ssStoreInit(callApi);   // 取り込み停止の赤い帯・規約v1.3の同意確認（storecommon.js）
   } catch (e) {
     showLoginError('通信エラー: ' + e.message + '（APIのURLが正しいか確認してください）');
     state.token = '';

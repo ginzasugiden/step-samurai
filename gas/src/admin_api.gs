@@ -23,6 +23,7 @@ const ADMIN_ACTIONS_ = [
   'bridge_config_hint', 'system_status', 'create_invite', 'set_credentials', 'set_smtp', 'reset_password',
   'set_billing', 'ensure_billing_schema', 'purge_tenant',
   'issue_ext_token', 'revoke_ext_token', 'final_delete_tenant',
+  'dry_run_review_tiers', 'list_sync_problems',
 ];
 
 const TENANT_ID_PATTERN_ = /^[a-z0-9][a-z0-9_-]{2,29}$/;
@@ -39,6 +40,8 @@ function handleAdminAction_(req) {
   try {
     switch (req.action) {
       case 'list_tenants':        return jsonResponse_({ ok: true, tenants: adminListTenants_() });
+      case 'dry_run_review_tiers': return withTenant_(tenantId, () => dryRunReviewTiers(tenantId, payload.days));   // 送信せず、送る予定の内容を返す（review_tiers.gs）
+      case 'list_sync_problems':  return jsonResponse_({ ok: true, problems: listSyncProblems_() });   // 拡張の取り込みが止まっている店舗（sync_alerts.gs）
       case 'create_tenant':       return jsonResponse_(adminCreateTenant_(payload));
       case 'setup_config_sheets': return withTenant_(tenantId, () => ({ ok: true, result: setupTenantConfigSheets_(tenantId) }));
       case 'set_tenant_status':   return withTenant_(tenantId, () => adminSetStatus_(tenantId, String(payload.status || '')));

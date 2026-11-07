@@ -357,9 +357,35 @@ function handleExtIngestReviews_(payload) {
 
     // 同期完了の心拍として、空配列でも最終受信日時を記録する（失敗しても取込結果は返す）
     try { recordExtLastUsed_(token); } catch (e) { Logger.log(`[${tenantId}] ext_ingest_reviews last_used_at error: ${e.message}`); }
+    // 取り込み成功（0件でも正常）。last_review_sync_at と拡張の状態を記録し、要対応の起点を解除する（sync_alerts.gs）
+    try { recordExtStatus_(tenantId, { status: 'ok', version: payload.ext_version }); } catch (e) { Logger.log(`[${tenantId}] ext_ingest_reviews status error: ${e.message}`); }
 
     Logger.log(`[${tenantId}] ext_ingest_reviews received=${result.received} valid=${valid} rejected=${result.rejected} inserted=${result.inserted} updated=${result.updated}`);
     return result;
+  } catch (e) {
+    return extError_('internal_error');
+  }
+}
+
+// ===== doPost action=ext_report_status（拡張の状態報告。レビューは含まない） =====
+
+/** payload: { token, status: ok|not_logged_in|failed, version }。ok はここでは受け付けない（成功は ext_ingest_reviews の実書き込みでのみ記録する） */
+function handleExtReportStatus_(payload) {
+  try {
+    payload = payload || {};
+    const throttled = isExtAuthThrottled_();
+    const auth = resolveExtToken_(payload.token, throttled);
+    if (auth.status !== 'ok') {
+      if (throttled) return extError_('busy');
+      recordExtAuthFailure_();
+      return extError_(auth.status === 'revoked' ? 'token_revoked' : 'unauthorized');
+    }
+    const st = String(payload.status || '');
+    if (st !== 'not_logged_in' && st !== 'failed') return extError_('invalid_payload');
+    const t = listAllTenants_().find(x => x.tenant_id === auth.tenant_id);
+    if (!t || (t.status !== 'active' && t.status !== 'setup')) return extError_('tenant_not_active');
+    const r = recordExtStatus_(auth.tenant_id, { status: st, version: payload.version });
+    return r.ok ? { ok: true } : extError_('invalid_payload');
   } catch (e) {
     return extError_('internal_error');
   }

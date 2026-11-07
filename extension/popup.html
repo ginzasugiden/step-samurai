@@ -9,16 +9,13 @@
 <body>
 <div class="wrap popup">
   <h1>ステップ侍 レビュー取込</h1>
-  <p><span id="level" class="badge info"></span> <strong id="headline"></strong></p>
+  <div id="status" class="status info"><span id="level" class="badge info"></span> <strong id="headline"></strong></div>
   <p id="detail"></p>
-  <p class="muted">最終同期: <span id="last"></span></p>
+  <p class="muted">最後に成功した日時: <span id="last"></span></p>
   <div class="row">
-    <button id="sync" type="button">今すぐ同期</button>
+    <button id="sync" type="button">今すぐ取り込む</button>
+    <button id="openrms" type="button" class="secondary">RMSを開く</button>
     <a id="settings" href="#">設定を開く</a>
-  </div>
-  <div id="guide" class="box" hidden>
-    <p>RMS のレビューチェックツールを開いてから、もう一度押してください。</p>
-    <p><a href="https://review.rms.rakuten.co.jp/" target="_blank" rel="noopener">楽天 RMS のレビューチェックツールを開く</a></p>
   </div>
   <p id="result" class="muted"></p>
 </div>

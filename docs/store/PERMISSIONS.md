@@ -31,8 +31,16 @@
 
 | 権限 | 使わない理由 |
 |---|---|
-| `tabs` | RMS のタブの検索は、ホスト権限があれば URL 指定の検索（`chrome.tabs.query({url})`）と `chrome.tabs.sendMessage` で足りるため。タブのタイトル・URL の一覧は取得しない。 |
+| `tabs` | 拡張機能は RMS のタブを検索・操作しない（`chrome.tabs.create` は権限不要で、「RMSを開く」ボタンの新規タブにだけ使う）。 |
 | `scripting` | コンテンツスクリプトを manifest で宣言しているため不要。 |
 | `cookies` | Cookie を読まない。RMS への取得はブラウザが同一オリジンで自動的に付ける。 |
 | `webRequest` | 通信を監視・改変しない。 |
-| `notifications` | 通知はバッジとポップアップのみ。 |
+
+## v1.1.0 で追加した権限（既存の公開版 v1.0.0 との差分）
+| 権限 | 追加 | 用途 |
+|---|---|---|
+| `alarms` | （v1.0.0 から既にあり） | 3時間ごとの自動取り込み（chrome.alarms）。 |
+| `notifications` | **新規** | 「RMSにログインしてください」「取り込みを再開しました」のデスクトップ通知。**更新時に Chrome が権限の確認を表示します**（ユーザーが承認するまで更新が保留される場合があります）。 |
+| host_permissions | 変更なし | 3つのまま（review.rms.rakuten.co.jp / script.google.com / script.googleusercontent.com）。 |
+
+通知の内容は固定の文言のみで、レビュー内容・個人情報は含まない。ログイン情報（ID・パスワード・Cookie）は保存も送信もしない。
